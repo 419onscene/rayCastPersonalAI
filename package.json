@@ -1,0 +1,268 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "personal-ai",
+  "title": "Personal AI",
+  "description": "Ask Claude, ChatGPT, Grok, Ollama, or Apple Intelligence with your own accounts, and open prompts in the Claude and ChatGPT desktop apps.",
+  "icon": "icon.png",
+  "author": "csa819",
+  "platforms": [
+    "macOS"
+  ],
+  "categories": [
+    "Productivity"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "claude",
+    "chatgpt",
+    "openai",
+    "grok",
+    "xai",
+    "ollama",
+    "apple intelligence"
+  ],
+  "commands": [
+    {
+      "name": "ask",
+      "title": "Ask",
+      "subtitle": "Personal AI",
+      "description": "Type a prompt and read the reply in Raycast. Pick the provider, model, and thinking level for this run.",
+      "mode": "view",
+      "keywords": [
+        "prompt",
+        "chat",
+        "ai"
+      ]
+    },
+    {
+      "name": "ask-claude",
+      "title": "Ask Claude",
+      "subtitle": "Anthropic",
+      "description": "Ask Claude with your Anthropic API key and read the reply in Raycast.",
+      "mode": "view",
+      "keywords": [
+        "anthropic",
+        "claude"
+      ]
+    },
+    {
+      "name": "ask-chatgpt",
+      "title": "Ask ChatGPT",
+      "subtitle": "OpenAI",
+      "description": "Ask ChatGPT with your OpenAI API key and read the reply in Raycast.",
+      "mode": "view",
+      "keywords": [
+        "openai",
+        "gpt",
+        "chatgpt"
+      ]
+    },
+    {
+      "name": "ask-grok",
+      "title": "Ask Grok",
+      "subtitle": "xAI",
+      "description": "Ask Grok with your xAI API key and read the reply in Raycast.",
+      "mode": "view",
+      "keywords": [
+        "xai",
+        "grok"
+      ]
+    },
+    {
+      "name": "ask-ollama",
+      "title": "Ask Ollama",
+      "subtitle": "Local",
+      "description": "Ask a model running on your local Ollama server and read the reply in Raycast.",
+      "mode": "view",
+      "keywords": [
+        "ollama",
+        "local"
+      ]
+    },
+    {
+      "name": "ask-apple-intelligence",
+      "title": "Ask Apple Intelligence",
+      "subtitle": "Shortcuts",
+      "description": "Send a prompt to a Shortcuts shortcut that calls Apple Intelligence, then show the reply in Raycast.",
+      "mode": "view",
+      "keywords": [
+        "apple",
+        "shortcuts",
+        "siri"
+      ]
+    },
+    {
+      "name": "open-claude",
+      "title": "Open in Claude",
+      "subtitle": "Desktop app",
+      "description": "Open the Claude desktop app with your prompt filled in.",
+      "mode": "view",
+      "keywords": [
+        "claude",
+        "desktop"
+      ]
+    },
+    {
+      "name": "open-chatgpt",
+      "title": "Open in ChatGPT",
+      "subtitle": "Desktop app",
+      "description": "Open the ChatGPT desktop app with your prompt filled in.",
+      "mode": "view",
+      "keywords": [
+        "chatgpt",
+        "desktop"
+      ]
+    },
+    {
+      "name": "manage-prompts",
+      "title": "Manage Saved Prompts",
+      "subtitle": "Personal AI",
+      "description": "Create, edit, and delete prompt templates stored on this Mac.",
+      "mode": "view",
+      "keywords": [
+        "templates",
+        "prompts"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "defaultProvider",
+      "title": "Default Provider",
+      "description": "Provider used by the Ask command until you pick another one in the window.",
+      "type": "dropdown",
+      "required": false,
+      "default": "anthropic",
+      "data": [
+        {
+          "title": "Claude",
+          "value": "anthropic"
+        },
+        {
+          "title": "ChatGPT",
+          "value": "openai"
+        },
+        {
+          "title": "Grok",
+          "value": "xai"
+        },
+        {
+          "title": "Ollama",
+          "value": "ollama"
+        },
+        {
+          "title": "Apple Intelligence",
+          "value": "apple"
+        }
+      ]
+    },
+    {
+      "name": "defaultModel",
+      "title": "Default Model",
+      "description": "Model id used when a command does not override it. Leave blank to use that provider's recommended model.",
+      "type": "textfield",
+      "required": false,
+      "default": "",
+      "placeholder": "claude-opus-5-5"
+    },
+    {
+      "name": "defaultThinking",
+      "title": "Default Thinking",
+      "description": "Thinking or reasoning level used until you override it in the Ask window.",
+      "type": "dropdown",
+      "required": false,
+      "default": "medium",
+      "data": [
+        {
+          "title": "Off",
+          "value": "off"
+        },
+        {
+          "title": "Low",
+          "value": "low"
+        },
+        {
+          "title": "Medium",
+          "value": "medium"
+        },
+        {
+          "title": "High",
+          "value": "high"
+        },
+        {
+          "title": "Extra high",
+          "value": "xhigh"
+        }
+      ]
+    },
+    {
+      "name": "customModelId",
+      "title": "Custom Model",
+      "description": "Optional model id added to the model dropdown for whichever provider you select.",
+      "type": "textfield",
+      "required": false,
+      "default": "",
+      "placeholder": "my-org/custom-model"
+    },
+    {
+      "name": "ollamaBaseUrl",
+      "title": "Ollama Base URL",
+      "description": "Base URL of the local Ollama server. Installed models are loaded from /api/tags.",
+      "type": "textfield",
+      "required": false,
+      "default": "http://127.0.0.1:11434",
+      "placeholder": "http://127.0.0.1:11434"
+    },
+    {
+      "name": "appleShortcutName",
+      "title": "Apple Intelligence Shortcut",
+      "description": "Name of the Shortcuts shortcut that receives your prompt and returns text. Apple Intelligence has no third-party HTTP API.",
+      "type": "textfield",
+      "required": false,
+      "default": "Ask Apple Intelligence",
+      "placeholder": "Ask Apple Intelligence"
+    },
+    {
+      "name": "anthropicApiKey",
+      "title": "Anthropic API Key",
+      "description": "API key for Claude. Stored as a Raycast password. Create one in the Anthropic console.",
+      "type": "password",
+      "required": false
+    },
+    {
+      "name": "openaiApiKey",
+      "title": "OpenAI API Key",
+      "description": "API key for ChatGPT. Stored as a Raycast password. Create one in the OpenAI platform.",
+      "type": "password",
+      "required": false
+    },
+    {
+      "name": "xaiApiKey",
+      "title": "xAI API Key",
+      "description": "API key for Grok. Stored as a Raycast password. Create one in the xAI console.",
+      "type": "password",
+      "required": false
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^2.7.3"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
+    "@types/node": "22.19.17",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "~5.8.3"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
