@@ -1,6 +1,7 @@
 import { tmpdir } from "os";
 import { runAppleShortcut } from "./apple";
 import { commandEnv, resolveCliBinary } from "./binaries";
+import { ensureSignedIn, isAuthFailure, loginRequiredMessage, startCliLogin } from "./cli-login";
 import { buildProviderCommand } from "./cli-command";
 import {
   createOllamaPlainParser,
@@ -53,7 +54,7 @@ export async function generateReply(
     return;
   }
 
-  if (!input.model.trim()) {
+  if (input.provider !== "anthropic" && !input.model.trim()) {
     throw new Error("Pick a model from the account list.");
   }
 
@@ -65,6 +66,8 @@ export async function generateReply(
     thinkingLevels: input.thinkingLevels,
   });
   const binary = resolveOrThrow(command.command, preferencePath(input, command.command));
+  const signedIn = await ensureSignedIn(binary, command.command, handlers.signal);
+  if (signedIn) throw new Error(signedIn);
   const env = commandEnv(
     binary,
     input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : undefined,
@@ -104,6 +107,10 @@ export async function generateReply(
   } catch (error) {
     if (handlers.signal.aborted) throw error;
     const detail = commandErrorText(error);
+    if (isAuthFailure(detail)) {
+      startCliLogin(binary, command.command);
+      throw new Error(loginRequiredMessage(command.command));
+    }
     if (/enoent/i.test(detail)) {
       throw new Error(`\`${CLI_COMMAND[input.provider]}\` couldn't be started at ${binary}.`);
     }

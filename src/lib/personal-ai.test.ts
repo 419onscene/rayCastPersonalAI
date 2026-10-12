@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { formatShortcutError } from "./apple";
 import { candidatePaths, expandCliPath, resolveCliBinary } from "./binaries";
 import { buildProviderCommand } from "./cli-command";
+import { isAuthFailure, loginArgs, loginRequiredMessage } from "./cli-login";
 import { createOllamaPlainParser, deltasFromClaudeLine, deltasFromCodexLine, deltasFromGrokLine } from "./cli-output";
 import { composePrompt } from "./compose-prompt";
 import { chatGptPasteScript, chatgptDesktopUrl, claudeDesktopUrl, CLAUDE_PROMPT_LIMIT } from "./desktop";
@@ -173,6 +174,14 @@ describe("cli commands", () => {
     });
     assert.equal(omitted.args.includes("--effort"), false);
     assert.equal(command.args.join(" ").includes("api.anthropic.com"), false);
+    const current = buildProviderCommand({
+      provider: "anthropic",
+      model: "  ",
+      thinking: "",
+      prompt: "Hello",
+    });
+    assert.equal(current.args.includes("--model"), false);
+    assert.equal(current.args.includes("--effort"), false);
   });
 
   it("calls codex exec and does not send Ultra for Luna", () => {
@@ -268,6 +277,26 @@ describe("binary resolution", () => {
       exists: (path) => path === "/Users/ada/.local/bin/claude",
     });
     assert.deepEqual(resolved, { path: "/Users/ada/.local/bin/claude" });
+  });
+
+  it("finds a CLI on the shell PATH when the prefilled file is missing", () => {
+    const resolved = resolveCliBinary({
+      command: "codex",
+      preferencePath: "/Users/<your-user-name>/.local/bin/codex",
+      home: "/Users/ada",
+      pathDirs: ["/Users/ada/.nvm/versions/node/v22/bin"],
+      exists: (path) => path === "/Users/ada/.nvm/versions/node/v22/bin/codex",
+    });
+    assert.deepEqual(resolved, { path: "/Users/ada/.nvm/versions/node/v22/bin/codex" });
+  });
+
+  it("names the browser sign-in command when a CLI is logged out", () => {
+    assert.deepEqual(loginArgs("claude"), ["auth", "login"]);
+    assert.deepEqual(loginArgs("codex"), ["login"]);
+    assert.deepEqual(loginArgs("grok"), ["login"]);
+    assert.equal(isAuthFailure("Please sign in with codex login"), true);
+    assert.match(loginRequiredMessage("claude"), /claude auth login/);
+    assert.match(loginRequiredMessage("claude"), /Finish that sign-in/);
   });
 
   it("checks common locations when the preference is blank", () => {

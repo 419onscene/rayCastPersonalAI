@@ -36,12 +36,12 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const initialProvider = locked ?? preferences.defaultProvider;
   const [provider, setProvider] = useState<ProviderId>(initialProvider);
   const [thinking, setThinking] = useState(defaultThinking);
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(initialProvider === "anthropic" ? defaultModel : "");
   const [prompts, setPrompts] = useState<SavedPrompt[] | undefined>(undefined);
   const [promptError, setPromptError] = useState<string>();
   const [models, setModels] = useState<AccountModel[]>([]);
   const [listError, setListError] = useState<string>();
-  const [listLoading, setListLoading] = useState(initialProvider !== "apple");
+  const [listLoading, setListLoading] = useState(initialProvider !== "apple" && initialProvider !== "anthropic");
   const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
   const [thinkingLoading, setThinkingLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>();
@@ -64,7 +64,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
   }, []);
 
   useEffect(() => {
-    if (provider === "apple") {
+    if (provider === "apple" || provider === "anthropic") {
       setModels([]);
       setListError(undefined);
       setListLoading(false);
@@ -134,7 +134,8 @@ export function AskCommand(props: { provider?: ProviderId }) {
     return () => controller.abort();
   }, [provider, model, ollamaCliPath, ollamaHost]);
 
-  const modelValue = models.some((item) => item.id === model) ? model : (models[0]?.id ?? "");
+  const modelValue =
+    provider === "anthropic" ? model.trim() : models.some((item) => item.id === model) ? model : (models[0]?.id ?? "");
   const selected = models.find((item) => item.id === modelValue);
   const reported = provider === "ollama" ? ollamaThinking : selected?.efforts;
   const catalog = resolveCatalog({
@@ -180,7 +181,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (!listError && provider !== "apple" && !modelValue) {
+    if (!listError && provider !== "apple" && provider !== "anthropic" && !modelValue) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Model Needed",
@@ -249,8 +250,9 @@ export function AskCommand(props: { provider?: ProviderId }) {
           onChange={(value) => {
             if (!isProviderId(value)) return;
             setProvider(value);
-            setModel("");
+            setModel(value === "anthropic" ? defaultModel : "");
             setModels([]);
+            setListError(undefined);
             setOllamaThinking(undefined);
           }}
         >
@@ -261,6 +263,15 @@ export function AskCommand(props: { provider?: ProviderId }) {
       )}
       {provider === "apple" ? (
         <Form.Description title="Model" text={`Runs the “${appleShortcutName}” shortcut with the shortcuts command.`} />
+      ) : provider === "anthropic" ? (
+        <Form.TextField
+          id="claudeModel"
+          title="Model"
+          value={model}
+          placeholder="Leave blank for Claude's current model"
+          info="Claude Code cannot list the models for this login. Leave this blank to use the model already selected in Claude Code, or type an id from /model."
+          onChange={setModel}
+        />
       ) : listLoading ? (
         <Form.Description title="Model" text="Checking which models this account can use…" />
       ) : models.length > 0 ? (
@@ -296,6 +307,15 @@ function resolveCatalog(input: {
   reported?: { values: string[]; defaultValue?: string; reported: boolean };
 }): ThinkingCatalog {
   if (input.provider === "apple") return thinkingCatalog("apple", "");
+  if (input.provider === "anthropic") {
+    if (!input.model) {
+      return {
+        levels: [],
+        note: "This run uses the model already selected in Claude Code, and it does not pass --effort.",
+      };
+    }
+    return thinkingCatalog("anthropic", input.model);
+  }
   if (input.listLoading) return { levels: [], note: "Checking which models this account can use…" };
   if (input.listError || !input.model) {
     return { levels: [], note: "Thinking stays hidden until a model from this account is selected." };

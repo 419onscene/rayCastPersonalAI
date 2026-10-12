@@ -1,4 +1,5 @@
 import { commandEnv, resolveCliBinary } from "./binaries";
+import { ensureSignedIn, isAuthFailure, loginRequiredMessage, startCliLogin } from "./cli-login";
 import { ollamaEnv, parseOllamaList } from "./ollama";
 import { commandErrorText, runCommand } from "./process";
 import { type CliName, type ProviderId } from "./types";
@@ -60,6 +61,9 @@ export async function listAccountModels(input: {
   const resolved = resolveCliBinary({ command: invocation.command, preferencePath: input.preferencePath });
   if ("error" in resolved) return { models: [], error: resolved.error };
 
+  const signedIn = await ensureSignedIn(resolved.path, invocation.command, input.signal);
+  if (signedIn) return { models: [], error: signedIn };
+
   const env = input.provider === "ollama" ? ollamaEnv(resolved.path, input.ollamaHost) : commandEnv(resolved.path);
   try {
     const result = await runCommand(resolved.path, invocation.args, { signal: input.signal, env });
@@ -68,10 +72,15 @@ export async function listAccountModels(input: {
     return { models };
   } catch (error) {
     if (input.signal?.aborted) throw error;
+    const detail = commandErrorText(error);
+    if (isAuthFailure(detail)) {
+      startCliLogin(resolved.path, invocation.command);
+      return { models: [], error: loginRequiredMessage(invocation.command) };
+    }
     const command = `${invocation.command} ${invocation.args.join(" ")}`;
     return {
       models: [],
-      error: `\`${command}\` failed. ${commandErrorText(error)} The dropdown stays empty, and no built-in model list is substituted.`,
+      error: `\`${command}\` failed. ${detail} The dropdown stays empty, and no built-in model list is substituted.`,
     };
   }
 }

@@ -74,15 +74,9 @@ Search order after the prefilled path:
 
 If you replace a prefilled path with a different file and that file is missing, the command stops.
 
-Sign in once in Terminal before the first Ask. Raycast runs each CLI without a terminal prompt, so the browser login happens in Terminal and is saved for later:
+The first Ask checks whether that CLI is signed in. If it is not, the extension starts `claude auth login`, `codex login`, or `grok login`, which should open a browser. Finish that sign-in, then ask again. The login is saved by the CLI. Ollama's local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below.
 
-```bash
-claude auth login
-codex login
-grok login
-```
-
-Ollama's local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below, not a CLI login.
+Claude Code has no command that lists the models for this login, so Ask Claude does not show a model menu. Leave Model blank and the run uses the model already selected in Claude Code. Type an id from Claude's `/model` command when you want a different one. ChatGPT, Grok, and Ollama still show only the models their list commands return.
 
 Claude is started with `--tools` set to an empty list so the reply does not edit files. Codex runs `exec` in a read-only sandbox. Grok is limited to one turn. These CLIs are still the same programs you use in a terminal, so a future CLI release can change a flag. The reply shows the CLI's own error when that happens.
 
@@ -103,7 +97,7 @@ Open **Raycast Settings → Extensions → Personal AI**.
 | Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                    |
 | Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                       |
 
-There are no API-key preferences. Sign in from Terminal with `claude auth login`, `codex login`, and `grok login`. Ask reuses that saved login.
+There are no API-key preferences. The first Ask opens the CLI's browser sign-in when that login is missing.
 
 ## Saved prompts
 

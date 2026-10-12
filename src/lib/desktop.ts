@@ -63,7 +63,7 @@ export async function openClaudeDesktop(prompt: string): Promise<{ truncated: bo
   await assertMacApp("Claude");
   const target = claudeDesktopUrl(prompt);
   try {
-    await runCommand("open", [target.url]);
+    await runCommand(macTool("open"), [target.url]);
   } catch (error) {
     throw new Error(`Couldn't open Claude. ${commandErrorText(error)}`);
   }
@@ -82,7 +82,7 @@ export async function openChatGptDesktop(prompt: string): Promise<{ method: "pas
       throw new Error(chatGptPasteFailure(detail, true));
     }
     try {
-      await runCommand("open", [chatgptDesktopUrl(prompt)]);
+      await runCommand(macTool("open"), [chatgptDesktopUrl(prompt)]);
     } catch (openError) {
       throw new Error(
         `${chatGptPasteFailure(detail, true)} Opening the chatgpt:// link also failed. ${commandErrorText(openError)}`,
@@ -97,14 +97,14 @@ async function pasteIntoChatGpt(prompt: string): Promise<void> {
   const promptFile = join(directory, "prompt.txt");
   try {
     await writeFile(promptFile, prompt, "utf8");
-    await runCommand("osascript", ["-"], { input: chatGptPasteScript(promptFile) });
+    await runCommand(macTool("osascript"), ["-"], { input: chatGptPasteScript(promptFile) });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
 
 async function copyToClipboard(prompt: string): Promise<void> {
-  await runCommand("pbcopy", [], { input: prompt });
+  await runCommand(macTool("pbcopy"), [], { input: prompt });
 }
 
 async function assertMacApp(appName: string): Promise<void> {
@@ -112,7 +112,7 @@ async function assertMacApp(appName: string): Promise<void> {
     throw new Error(`Opening ${appName} needs macOS.`);
   }
   try {
-    await runCommand("osascript", ["-e", `POSIX path of (path to application ${appleString(appName)})`]);
+    await runCommand(macTool("osascript"), ["-e", `POSIX path of (path to application ${appleString(appName)})`]);
   } catch {
     throw new Error(`${appName} isn't installed. Install the desktop app, then try again.`);
   }
@@ -127,6 +127,10 @@ function chatGptPasteFailure(detail: string, blocked: boolean): string {
   }
   if (blocked) return `Couldn't paste into ChatGPT. The prompt is on your clipboard. ${detail}`;
   return `Opened ChatGPT with a link because pasting into the app failed. If the composer is empty, paste the prompt. ${detail}`;
+}
+
+function macTool(name: "open" | "osascript" | "pbcopy"): string {
+  return process.platform === "darwin" ? `/usr/bin/${name}` : name;
 }
 
 function isAccessibilityError(detail: string): boolean {

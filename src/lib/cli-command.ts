@@ -34,18 +34,9 @@ function allowedLevel(input: {
 }
 
 function claudeArgs(model: string, prompt: string, effort?: string): string[] {
-  const args = [
-    "-p",
-    prompt,
-    "--model",
-    model,
-    "--output-format",
-    "stream-json",
-    "--verbose",
-    "--include-partial-messages",
-    "--tools",
-    "",
-  ];
+  const args = ["-p", prompt];
+  if (model.trim()) args.push("--model", model.trim());
+  args.push("--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "");
   if (effort) args.push("--effort", effort);
   return args;
 }

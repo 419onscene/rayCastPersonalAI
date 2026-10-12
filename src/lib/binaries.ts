@@ -1,6 +1,7 @@
+import { spawnSync } from "child_process";
+import { statSync } from "fs";
 import { homedir } from "os";
 import { dirname } from "path";
-import { statSync } from "fs";
 import { type CliName } from "./types";
 
 const INSTALL_HINT: Record<CliName, string> = {
@@ -52,25 +53,23 @@ export function resolveCliBinary(input: {
   preferencePath: string;
   home?: string;
   exists?: (path: string) => boolean;
+  pathDirs?: string[];
 }): { path: string } | { error: string } {
   const home = input.home ?? homedir();
   const exists = input.exists ?? fileExists;
   const preference = expandCliPath(input.preferencePath, home);
   const candidates = candidatePaths(input.command, home);
+  const fromPath = (input.pathDirs ?? (input.exists ? [] : loginPathDirs())).map((dir) => `${dir}/${input.command}`);
+  const lookedIn = [...(preference ? [preference] : []), ...candidates, ...fromPath];
 
-  if (preference) {
-    if (exists(preference)) return { path: preference };
-    if (!candidates.includes(preference)) {
-      return {
-        error: missingCliMessage(input.command, [preference, ...candidates], true),
-      };
-    }
-  }
-
+  if (preference && exists(preference)) return { path: preference };
   for (const path of candidates) {
     if (exists(path)) return { path };
   }
-  return { error: missingCliMessage(input.command, candidates, false) };
+  for (const path of fromPath) {
+    if (exists(path)) return { path };
+  }
+  return { error: missingCliMessage(input.command, lookedIn, Boolean(preference)) };
 }
 
 export function missingCliMessage(command: CliName, lookedIn: string[], preferenceMissing: boolean): string {
@@ -81,9 +80,43 @@ export function missingCliMessage(command: CliName, lookedIn: string[], preferen
   return `\`${command}\` isn't available. ${INSTALL_HINT[command]} ${preference}Raycast does not inherit your shell PATH, and this extension does not fall back to an API key. Set the binary path in extension preferences.`;
 }
 
+let cachedLoginDirs: string[] | undefined;
+
+export function loginPathDirs(): string[] {
+  if (cachedLoginDirs) return cachedLoginDirs;
+  cachedLoginDirs = readLoginPath();
+  return cachedLoginDirs;
+}
+
+function readLoginPath(): string[] {
+  for (const shell of ["/bin/zsh", "/bin/bash"]) {
+    try {
+      const result = spawnSync(shell, ["-lc", 'printf %s "$PATH"'], {
+        encoding: "utf8",
+        timeout: 4000,
+        env: { ...process.env, HOME: homedir() },
+      });
+      if (result.status === 0 && result.stdout.trim()) {
+        return result.stdout.trim().split(":").filter(Boolean);
+      }
+    } catch {
+      // The next shell may exist on this Mac.
+    }
+  }
+  return (process.env.PATH ?? "").split(":").filter(Boolean);
+}
+
 export function commandEnv(binaryPath: string, extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const home = homedir();
-  const prefix = [dirname(binaryPath), `${home}/.local/bin`, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"];
+  const prefix = [
+    dirname(binaryPath),
+    ...loginPathDirs(),
+    `${home}/.local/bin`,
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+  ];
   const current = process.env.PATH ?? "";
   const path = [...prefix, ...current.split(":")].filter((part, index, all) => part && all.indexOf(part) === index);
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: path.join(":") };
