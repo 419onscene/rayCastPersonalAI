@@ -106,12 +106,16 @@ function readLoginPath(): string[] {
   return (process.env.PATH ?? "").split(":").filter(Boolean);
 }
 
-export function commandEnv(binaryPath: string, extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
-  const home = homedir();
+export function commandEnv(
+  binaryPath: string,
+  extra?: Record<string, string | undefined>,
+  home?: string,
+): NodeJS.ProcessEnv {
+  const resolvedHome = home ?? homedir();
   const prefix = [
     dirname(binaryPath),
     ...loginPathDirs(),
-    `${home}/.local/bin`,
+    `${resolvedHome}/.local/bin`,
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/usr/bin",
@@ -120,6 +124,7 @@ export function commandEnv(binaryPath: string, extra?: Record<string, string | u
   const current = process.env.PATH ?? "";
   const path = [...prefix, ...current.split(":")].filter((part, index, all) => part && all.indexOf(part) === index);
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: path.join(":") };
+  if (home) env.HOME = home;
   for (const [key, value] of Object.entries(extra ?? {})) {
     if (value) env[key] = value;
     else delete env[key];

@@ -46,11 +46,12 @@ Each command is declared separately so you can bind them independently:
 | Ask Apple Intelligence | Locked to your Shortcut. Calls `shortcuts`.                                                               |
 | Open in Claude         | Opens the Claude desktop app with the prompt filled in.                                                   |
 | Open in ChatGPT        | Opens the ChatGPT desktop app and pastes the prompt into a new chat.                                      |
+| Add AI                 | Saves this Mac's account name and starts sign-in for Claude, ChatGPT, and Grok.                           |
 | Manage Saved Prompts   | Create, edit, and delete templates.                                                                       |
 
 ## Local CLIs
 
-Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with your Mac account name, so you can leave that text as it is. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
+Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with the Mac account name saved in **Add AI**. Until that name is saved, the extension uses the account Raycast is running as. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
 
 | Provider           | Binary      | What it runs                                                                                                 |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------ |
@@ -74,7 +75,9 @@ Search order after the prefilled path:
 
 If you replace a prefilled path with a different file and that file is missing, the command stops.
 
-The first Ask checks whether that CLI is signed in. If it is not, the extension starts `claude auth login`, `codex login`, or `grok login`, which should open a browser. Finish that sign-in, then ask again. The login is saved by the CLI. Ollama's local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below.
+Run **Add AI** and enter the short Mac account name (the folder name inside `/Users`). Save it, then use **Sign In to Claude**, **Sign In to ChatGPT**, or **Sign In to Grok**. Each action starts `claude auth login`, `codex login`, or `grok login`, which should open a browser. Finish that sign-in, then ask. The login is saved by the CLI. **Check Ollama** confirms the `ollama` command is installed. Local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below.
+
+Ask still checks the login. If it is missing, the same browser sign-in starts from the reply.
 
 Claude Code has no command that lists the models for this login, so Ask Claude does not show a model menu. Leave Model blank and the run uses the model already selected in Claude Code. Type an id from Claude's `/model` command when you want a different one. ChatGPT, Grok, and Ollama still show only the models their list commands return.
 
@@ -84,20 +87,20 @@ Claude is started with `--tools` set to an empty list so the reply does not edit
 
 Open **Raycast Settings → Extensions → Personal AI**.
 
-| Preference                  | Use                                                                                      |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| Default Provider            | Used by **Ask** until you change the dropdown in the window.                             |
+| Preference                  | Use                                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Default Provider            | Used by **Ask** until you change the dropdown in the window.                                                                                                                         |
 | Default Model               | Model id to select when that provider's account list includes it. It does not add a model the CLI did not return. Leave blank to use the CLI's default, or the first model returned. |
-| Default Thinking            | A level id, such as `medium`. Applied only when the selected model offers it.            |
-| Ollama Host                 | Optional `OLLAMA_HOST` for the `ollama` command. Leave blank for the CLI default.        |
-| Apple Intelligence Shortcut | Shortcut name. Defaults to `Ask Apple Intelligence`.                                     |
-| Claude CLI Path             | Prefilled as `/Users/<your-user-name>/.local/bin/claude`.                                |
-| Codex CLI Path              | Prefilled as `/Users/<your-user-name>/.local/bin/codex`.                                 |
-| Grok CLI Path               | Prefilled as `/Users/<your-user-name>/.local/bin/grok`.                                  |
-| Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                    |
-| Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                       |
+| Default Thinking            | A level id, such as `medium`. Applied only when the selected model offers it.                                                                                                        |
+| Ollama Host                 | Optional `OLLAMA_HOST` for the `ollama` command. Leave blank for the CLI default.                                                                                                    |
+| Apple Intelligence Shortcut | Shortcut name. Defaults to `Ask Apple Intelligence`.                                                                                                                                 |
+| Claude CLI Path             | Prefilled as `/Users/<your-user-name>/.local/bin/claude`.                                                                                                                            |
+| Codex CLI Path              | Prefilled as `/Users/<your-user-name>/.local/bin/codex`.                                                                                                                             |
+| Grok CLI Path               | Prefilled as `/Users/<your-user-name>/.local/bin/grok`.                                                                                                                              |
+| Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                                                                                                                |
+| Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                                                                                                                   |
 
-There are no API-key preferences. The first Ask opens the CLI's browser sign-in when that login is missing.
+There are no API-key preferences. **Add AI** opens the CLI's browser sign-in. Ask does the same when that login is missing.
 
 ## Saved prompts
 
@@ -109,13 +112,13 @@ In any Ask or desktop command, choose a saved prompt in the dropdown. The text y
 
 The model dropdown shows only the models the signed-in CLI reports. There is no built-in catalog and no custom-model preference.
 
-| Provider           | Command that lists models                                                                                                                          | What the dropdown shows                                                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Claude             | None. The [CLI reference](https://code.claude.com/docs/en/cli-reference) has no non-interactive list. The account picker is the interactive `/model` command ([Models, usage, and limits](https://support.claude.com/en/articles/14552983-models-usage-and-limits-in-claude-code)). | The dropdown stays hidden. The form and the reply view say Claude Code cannot list the models for this login.               |
-| ChatGPT            | `codex debug models` ([CLI reference](https://developers.openai.com/codex/cli/reference))                                                          | Selectable models in the JSON catalog that command prints for the signed-in account.                                         |
-| Grok               | `grok models` ([CLI reference](https://docs.x.ai/build/cli/reference))                                                                             | Models that command prints.                                                                                                  |
-| Ollama             | `ollama list`                                                                                                                                      | Models installed on the local server, which is the set that can run.                                                         |
-| Apple Intelligence | None                                                                                                                                               | No model menu. The shortcut runs as you built it.                                                                            |
+| Provider           | Command that lists models                                                                                                                                                                                                                                                           | What the dropdown shows                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Claude             | None. The [CLI reference](https://code.claude.com/docs/en/cli-reference) has no non-interactive list. The account picker is the interactive `/model` command ([Models, usage, and limits](https://support.claude.com/en/articles/14552983-models-usage-and-limits-in-claude-code)). | The dropdown stays hidden. The form and the reply view say Claude Code cannot list the models for this login. |
+| ChatGPT            | `codex debug models` ([CLI reference](https://developers.openai.com/codex/cli/reference))                                                                                                                                                                                           | Selectable models in the JSON catalog that command prints for the signed-in account.                          |
+| Grok               | `grok models` ([CLI reference](https://docs.x.ai/build/cli/reference))                                                                                                                                                                                                              | Models that command prints.                                                                                   |
+| Ollama             | `ollama list`                                                                                                                                                                                                                                                                       | Models installed on the local server, which is the set that can run.                                          |
+| Apple Intelligence | None                                                                                                                                                                                                                                                                                | No model menu. The shortcut runs as you built it.                                                             |
 
 `codex debug models` refreshes the catalog Codex sees for the signed-in ChatGPT account. This extension does not pass `--bundled`, which prints only the catalog shipped inside the binary.
 

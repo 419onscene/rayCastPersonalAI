@@ -50,8 +50,9 @@ export async function readOllamaThinking(
   model: string,
   host: string,
   signal?: AbortSignal,
+  home?: string,
 ): Promise<OllamaThinking> {
-  const env = ollamaEnv(binary, host);
+  const env = ollamaEnv(binary, host, home);
   let stdout = "";
   try {
     stdout = (await runCommand(binary, ["show", model, "--format", "json"], { signal, env })).stdout;
@@ -62,9 +63,9 @@ export async function readOllamaThinking(
   return ollamaThinkingFromOutput(model, stdout);
 }
 
-export function ollamaEnv(binary: string, host: string): NodeJS.ProcessEnv {
+export function ollamaEnv(binary: string, host: string, home?: string): NodeJS.ProcessEnv {
   const trimmed = host.trim();
-  return commandEnv(binary, trimmed ? { OLLAMA_HOST: trimmed } : undefined);
+  return commandEnv(binary, trimmed ? { OLLAMA_HOST: trimmed } : undefined, home);
 }
 
 function isGptOss(model: string): boolean {

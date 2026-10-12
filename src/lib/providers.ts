@@ -29,6 +29,7 @@ export interface GenerateInput {
   grokCliPath: string;
   ollamaCliPath: string;
   shortcutsCliPath: string;
+  home?: string;
 }
 
 export async function generateReply(
@@ -43,7 +44,7 @@ export async function generateReply(
   if (input.listError) throw new Error(input.listError);
 
   if (input.provider === "apple") {
-    const binary = resolveOrThrow("shortcuts", input.shortcutsCliPath);
+    const binary = resolveOrThrow("shortcuts", input.shortcutsCliPath, input.home);
     const text = await runAppleShortcut({
       name: input.appleShortcutName,
       prompt: input.prompt,
@@ -65,12 +66,13 @@ export async function generateReply(
     prompt: input.prompt,
     thinkingLevels: input.thinkingLevels,
   });
-  const binary = resolveOrThrow(command.command, preferencePath(input, command.command));
-  const signedIn = await ensureSignedIn(binary, command.command, handlers.signal);
+  const binary = resolveOrThrow(command.command, preferencePath(input, command.command), input.home);
+  const signedIn = await ensureSignedIn(binary, command.command, handlers.signal, input.home);
   if (signedIn) throw new Error(signedIn);
   const env = commandEnv(
     binary,
     input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : undefined,
+    input.home,
   );
 
   try {
@@ -108,7 +110,7 @@ export async function generateReply(
     if (handlers.signal.aborted) throw error;
     const detail = commandErrorText(error);
     if (isAuthFailure(detail)) {
-      startCliLogin(binary, command.command);
+      startCliLogin(binary, command.command, input.home);
       throw new Error(loginRequiredMessage(command.command));
     }
     if (/enoent/i.test(detail)) {
@@ -124,8 +126,8 @@ function emit(deltas: ReplyDelta[], onDelta: (delta: ReplyDelta) => void): void 
   }
 }
 
-function resolveOrThrow(command: CliName, preferencePath: string): string {
-  const resolved = resolveCliBinary({ command, preferencePath });
+function resolveOrThrow(command: CliName, preferencePath: string, home?: string): string {
+  const resolved = resolveCliBinary({ command, preferencePath, home });
   if ("error" in resolved) throw new Error(resolved.error);
   return resolved.path;
 }

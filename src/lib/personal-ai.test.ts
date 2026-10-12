@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { accountHome, detectedAccountName } from "./account-name";
 import { formatShortcutError } from "./apple";
 import { candidatePaths, expandCliPath, resolveCliBinary } from "./binaries";
 import { buildProviderCommand } from "./cli-command";
@@ -242,6 +243,18 @@ describe("cli commands", () => {
       thinkingLevels: ["low", "medium", "high"],
     });
     assert.ok(medium.args.includes("--think=medium"));
+  });
+});
+
+describe("account name", () => {
+  it("turns the saved Mac account name into a home path", () => {
+    assert.equal(detectedAccountName("/Users/ada"), "ada");
+    assert.equal(accountHome("ada"), "/Users/ada");
+    assert.equal(accountHome("  ada  "), "/Users/ada");
+    assert.equal(accountHome("ada.local"), "/Users/ada.local");
+    assert.equal(accountHome(""), undefined);
+    assert.equal(accountHome("../etc"), undefined);
+    assert.equal(accountHome("ada/bin"), undefined);
   });
 });
 

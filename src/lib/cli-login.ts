@@ -28,13 +28,13 @@ export function loginRequiredMessage(command: CliName): string {
   return `${name} isn't signed in yet. ${shown} should open a browser. Finish that sign-in, then ask again.`;
 }
 
-export function startCliLogin(binary: string, command: CliName): void {
+export function startCliLogin(binary: string, command: CliName, home?: string): void {
   const args = loginArgs(command);
   if (!args) return;
   const child = spawn(binary, args, {
     detached: true,
     stdio: "ignore",
-    env: commandEnv(binary),
+    env: commandEnv(binary, undefined, home),
   });
   child.unref();
 }
@@ -43,20 +43,26 @@ export async function ensureSignedIn(
   binary: string,
   command: CliName,
   signal?: AbortSignal,
+  home?: string,
 ): Promise<string | undefined> {
   const args = statusArgs(command);
   if (!args) return undefined;
-  const state = await loginState(binary, args, signal);
+  const state = await loginState(binary, args, signal, home);
   if (state !== "no") return undefined;
-  startCliLogin(binary, command);
+  startCliLogin(binary, command, home);
   return loginRequiredMessage(command);
 }
 
-async function loginState(binary: string, args: string[], signal?: AbortSignal): Promise<"yes" | "no" | "unknown"> {
+async function loginState(
+  binary: string,
+  args: string[],
+  signal?: AbortSignal,
+  home?: string,
+): Promise<"yes" | "no" | "unknown"> {
   const timeout = AbortSignal.timeout(10000);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
   try {
-    await runCommand(binary, args, { env: commandEnv(binary), signal: combined });
+    await runCommand(binary, args, { env: commandEnv(binary, undefined, home), signal: combined });
     return "yes";
   } catch (error) {
     if (signal?.aborted) throw error;

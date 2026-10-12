@@ -115,6 +115,19 @@
       ]
     },
     {
+      "name": "add-ai",
+      "title": "Add AI",
+      "subtitle": "Account and sign-in",
+      "description": "Enter this Mac's account name and sign in to Claude, ChatGPT, and Grok. Check that Ollama is installed.",
+      "mode": "view",
+      "keywords": [
+        "login",
+        "account",
+        "authenticate",
+        "setup"
+      ]
+    },
+    {
       "name": "manage-prompts",
       "title": "Manage Saved Prompts",
       "subtitle": "Personal AI",
@@ -196,7 +209,7 @@
     {
       "name": "claudeCliPath",
       "title": "Claude CLI Path",
-      "description": "Prefilled with the usual location. <your-user-name> is replaced with your Mac account name. If that file is missing, Homebrew and /usr/local/bin are checked too.",
+      "description": "Prefilled with the usual location. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, Homebrew and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/claude",
@@ -205,7 +218,7 @@
     {
       "name": "codexCliPath",
       "title": "Codex CLI Path",
-      "description": "Prefilled with the usual location of the Codex CLI. <your-user-name> is replaced with your Mac account name. If that file is missing, Homebrew and /usr/local/bin are checked too.",
+      "description": "Prefilled with the usual location of the Codex CLI. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, Homebrew and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/codex",
@@ -214,7 +227,7 @@
     {
       "name": "grokCliPath",
       "title": "Grok CLI Path",
-      "description": "Prefilled with the usual location. <your-user-name> is replaced with your Mac account name. If that file is missing, ~/.grok/bin, Homebrew, and /usr/local/bin are checked too.",
+      "description": "Prefilled with the usual location. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, ~/.grok/bin, Homebrew, and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/grok",

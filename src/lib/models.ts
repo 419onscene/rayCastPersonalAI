@@ -52,19 +52,27 @@ export async function listAccountModels(input: {
   provider: ProviderId;
   preferencePath: string;
   ollamaHost: string;
+  home?: string;
   signal?: AbortSignal;
 }): Promise<ModelListResult> {
   if (input.provider === "apple") return { models: [] };
   const invocation = modelListInvocation(input.provider);
   if ("error" in invocation) return { models: [], error: invocation.error };
 
-  const resolved = resolveCliBinary({ command: invocation.command, preferencePath: input.preferencePath });
+  const resolved = resolveCliBinary({
+    command: invocation.command,
+    preferencePath: input.preferencePath,
+    home: input.home,
+  });
   if ("error" in resolved) return { models: [], error: resolved.error };
 
-  const signedIn = await ensureSignedIn(resolved.path, invocation.command, input.signal);
+  const signedIn = await ensureSignedIn(resolved.path, invocation.command, input.signal, input.home);
   if (signedIn) return { models: [], error: signedIn };
 
-  const env = input.provider === "ollama" ? ollamaEnv(resolved.path, input.ollamaHost) : commandEnv(resolved.path);
+  const env =
+    input.provider === "ollama"
+      ? ollamaEnv(resolved.path, input.ollamaHost, input.home)
+      : commandEnv(resolved.path, undefined, input.home);
   try {
     const result = await runCommand(resolved.path, invocation.args, { signal: input.signal, env });
     const models = parseModelList(input.provider, result.stdout);
@@ -74,7 +82,7 @@ export async function listAccountModels(input: {
     if (input.signal?.aborted) throw error;
     const detail = commandErrorText(error);
     if (isAuthFailure(detail)) {
-      startCliLogin(resolved.path, invocation.command);
+      startCliLogin(resolved.path, invocation.command, input.home);
       return { models: [], error: loginRequiredMessage(invocation.command) };
     }
     const command = `${invocation.command} ${invocation.args.join(" ")}`;

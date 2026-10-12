@@ -10,6 +10,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { Answer } from "./answer";
+import { savedAccountHome } from "./lib/account-store";
 import { resolveCliBinary } from "./lib/binaries";
 import { composePrompt } from "./lib/compose-prompt";
 import { listAccountModels, selectAccountModel, type AccountModel } from "./lib/models";
@@ -45,7 +46,26 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
   const [thinkingLoading, setThinkingLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>();
+  const [home, setHome] = useState<string | undefined>();
+  const [homeReady, setHomeReady] = useState(false);
   const { push } = useNavigation();
+
+  useEffect(() => {
+    let cancelled = false;
+    savedAccountHome()
+      .then((value) => {
+        if (!cancelled) setHome(value);
+      })
+      .catch(() => {
+        if (!cancelled) setHome(undefined);
+      })
+      .finally(() => {
+        if (!cancelled) setHomeReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +91,10 @@ export function AskCommand(props: { provider?: ProviderId }) {
       setStatusMessage(undefined);
       return;
     }
+    if (!homeReady) {
+      setListLoading(true);
+      return;
+    }
     const controller = new AbortController();
     setListLoading(true);
     setListError(undefined);
@@ -88,6 +112,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       provider,
       preferencePath,
       ollamaHost,
+      home,
       signal: controller.signal,
     })
       .then((result) => {
@@ -104,7 +129,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
         if (!controller.signal.aborted) setListLoading(false);
       });
     return () => controller.abort();
-  }, [provider, defaultModel, ollamaHost, claudeCliPath, codexCliPath, grokCliPath, ollamaCliPath]);
+  }, [provider, defaultModel, ollamaHost, claudeCliPath, codexCliPath, grokCliPath, ollamaCliPath, home, homeReady]);
 
   useEffect(() => {
     if (provider !== "ollama" || !model) {
@@ -112,7 +137,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       setThinkingLoading(false);
       return;
     }
-    const resolved = resolveCliBinary({ command: "ollama", preferencePath: ollamaCliPath });
+    const resolved = resolveCliBinary({ command: "ollama", preferencePath: ollamaCliPath, home });
     if ("error" in resolved) {
       setOllamaThinking({ values: [], reported: false });
       setThinkingLoading(false);
@@ -121,7 +146,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
     const controller = new AbortController();
     setThinkingLoading(true);
     setStatusMessage(undefined);
-    readOllamaThinking(resolved.path, model, ollamaHost, controller.signal)
+    readOllamaThinking(resolved.path, model, ollamaHost, controller.signal, home)
       .then((report) => setOllamaThinking(report))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -132,7 +157,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
         if (!controller.signal.aborted) setThinkingLoading(false);
       });
     return () => controller.abort();
-  }, [provider, model, ollamaCliPath, ollamaHost]);
+  }, [provider, model, ollamaCliPath, ollamaHost, home]);
 
   const modelValue =
     provider === "anthropic" ? model.trim() : models.some((item) => item.id === model) ? model : (models[0]?.id ?? "");
@@ -173,7 +198,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
+    if (!homeReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
       await showToast({
         style: Toast.Style.Animated,
         title: "Still Checking Models",
@@ -208,6 +233,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
         grokCliPath={grokCliPath}
         ollamaCliPath={ollamaCliPath}
         shortcutsCliPath={shortcutsCliPath}
+        home={home}
       />,
     );
   }
