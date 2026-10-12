@@ -21,9 +21,9 @@ export const CURATED_MODELS: Record<"anthropic" | "openai" | "xai", CuratedModel
   openai: [
     { id: "gpt-6-astra", title: "GPT-6 Astra", recommended: true },
     { id: "gpt-6.1-sol", title: "GPT-6.1 Sol" },
+    { id: "gpt-6-sol", title: "GPT-6 Sol" },
     { id: "gpt-6-luna", title: "GPT-6 Luna" },
     { id: "gpt-5.6-sol", title: "GPT-5.6 Sol" },
-    { id: "gpt-5.4", title: "GPT-5.4" },
   ],
   xai: [
     { id: "grok-4.7", title: "Grok 4.7", recommended: true },

@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatShortcutError } from "./apple";
+import { candidatePaths, resolveCliBinary } from "./binaries";
+import { buildProviderCommand } from "./cli-command";
+import { createOllamaPlainParser, deltasFromClaudeLine, deltasFromCodexLine, deltasFromGrokLine } from "./cli-output";
 import { composePrompt } from "./compose-prompt";
-import { chatGptPasteScript, claudeDesktopUrl, CLAUDE_PROMPT_LIMIT, chatgptDesktopUrl } from "./desktop";
-import { extractErrorMessage, formatHttpError } from "./errors";
-import { buildModelChoices, selectModel } from "./models";
-import { normalizeBaseUrl, ollamaApiUrl } from "./ollama";
+import { chatGptPasteScript, chatgptDesktopUrl, claudeDesktopUrl, CLAUDE_PROMPT_LIMIT } from "./desktop";
+import { CURATED_MODELS, buildModelChoices, selectModel } from "./models";
+import { ollamaThinkingFromOutput, parseOllamaList } from "./ollama";
 import { parsePrompts } from "./prompt-json";
 import { renderReply } from "./render-reply";
-import { deltasFromAnthropic, deltasFromChatChunk, deltasFromOllama, deltasFromResponsesEvent, parseSse } from "./sse";
-import { planThinking } from "./thinking";
+import { offeredLevel, selectThinking, thinkingCatalog } from "./thinking";
+import { type ProviderId, type ReplyDelta } from "./types";
 
 describe("composePrompt", () => {
   it("appends typed text to a saved template", () => {
@@ -26,50 +28,253 @@ describe("composePrompt", () => {
   });
 });
 
-describe("thinking plans", () => {
-  it("keeps always-on Claude models at low effort instead of disabled", () => {
-    const plan = planThinking("anthropic", "claude-opus-5-5", "off");
-    assert.equal(plan.anthropic?.thinking?.type, "adaptive");
-    assert.equal(plan.anthropic?.effort, "low");
-    assert.match(plan.note ?? "", /cannot turn thinking off/);
+describe("thinking catalogs", () => {
+  it("lists Claude effort only for models in the Claude Code table", () => {
+    const opus = thinkingCatalog("anthropic", "claude-opus-5-5");
+    assert.deepEqual(
+      opus.levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh", "max"],
+    );
+    assert.equal(opus.defaultLevel, "medium");
+
+    const older = thinkingCatalog("anthropic", "claude-opus-4-6");
+    assert.deepEqual(
+      older.levels.map((level) => level.id),
+      ["low", "medium", "high", "max"],
+    );
+    assert.equal(thinkingCatalog("anthropic", "claude-opus-4-7").defaultLevel, "xhigh");
+    assert.equal(thinkingCatalog("anthropic", "claude-fable-5-1").defaultLevel, "high");
+    assert.equal(thinkingCatalog("anthropic", "custom-claude").levels.length, 0);
   });
 
-  it("disables thinking for Claude models that allow it", () => {
-    const plan = planThinking("anthropic", "claude-haiku-5-5", "off");
-    assert.deepEqual(plan.anthropic?.thinking, { type: "disabled" });
-    assert.equal(plan.anthropic?.effort, "low");
+  it("lists Codex levels from the ChatGPT models page", () => {
+    assert.deepEqual(
+      thinkingCatalog("openai", "gpt-6-astra").levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh"],
+    );
+    assert.equal(thinkingCatalog("openai", "gpt-6-astra").defaultLevel, "low");
+    assert.deepEqual(
+      thinkingCatalog("openai", "gpt-6.1-sol").levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh", "max", "ultra"],
+    );
+    assert.deepEqual(
+      thinkingCatalog("openai", "gpt-6-luna").levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh", "max"],
+    );
+    assert.equal(thinkingCatalog("openai", "gpt-6-sol").levels.length, 0);
+    assert.equal(thinkingCatalog("openai", "gpt-5.4").levels.length, 0);
   });
 
-  it("sends Anthropic effort and summarized adaptive thinking", () => {
-    const plan = planThinking("anthropic", "claude-fable-5-1", "xhigh");
-    assert.equal(plan.anthropic?.effort, "xhigh");
-    assert.deepEqual(plan.anthropic?.thinking, { type: "adaptive", display: "summarized" });
+  it("lists Grok effort from the reasoning docs and skips models that are not listed", () => {
+    assert.deepEqual(
+      thinkingCatalog("xai", "grok-4.7").levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh"],
+    );
+    assert.equal(thinkingCatalog("xai", "grok-4.7").defaultLevel, "high");
+    assert.deepEqual(
+      thinkingCatalog("xai", "grok-4.5").levels.map((level) => level.id),
+      ["low", "medium", "high"],
+    );
+    assert.equal(thinkingCatalog("xai", "grok-4.3").levels.length, 0);
+    assert.deepEqual(
+      thinkingCatalog("xai", "grok-4.20-multi-agent").levels.map((level) => level.id),
+      ["low", "medium", "high", "xhigh"],
+    );
   });
 
-  it("maps OpenAI off to reasoning_effort none, except models without that level", () => {
-    assert.equal(planThinking("openai", "gpt-6-luna", "off").openaiReasoningEffort, "none");
-    assert.equal(planThinking("openai", "gpt-6-astra", "off").openaiReasoningEffort, "low");
-    assert.equal(planThinking("openai", "gpt-6.1-sol", "high").openaiReasoningEffort, "high");
+  it("uses only the levels Ollama reported, and the documented GPT-OSS set when show is silent", () => {
+    const reported = thinkingCatalog("ollama", "qwen3", {
+      values: ["low", "medium", "high"],
+      defaultValue: "medium",
+      reported: true,
+    });
+    assert.deepEqual(
+      reported.levels.map((level) => level.id),
+      ["low", "medium", "high"],
+    );
+    const silent = thinkingCatalog("ollama", "qwen3", { values: [], reported: false });
+    assert.equal(silent.levels.length, 0);
+    assert.match(silent.note ?? "", /won't pass --think/);
   });
 
-  it("maps Grok off to low reasoning effort", () => {
-    const plan = planThinking("xai", "grok-4.7", "off");
-    assert.equal(plan.xaiReasoningEffort, "low");
-    assert.match(plan.note ?? "", /cannot turn reasoning off/);
-    assert.equal(planThinking("xai", "grok-4.7", "xhigh").xaiReasoningEffort, "xhigh");
-  });
-
-  it("maps Ollama think to false, a level, or max", () => {
-    assert.equal(planThinking("ollama", "qwen3", "off").ollamaThink, false);
-    assert.equal(planThinking("ollama", "qwen3", "medium").ollamaThink, "medium");
-    assert.equal(planThinking("ollama", "qwen3", "xhigh").ollamaThink, "max");
+  it("does not offer Off, and does not keep a level the next model lacks", () => {
+    for (const provider of ["anthropic", "openai", "xai"] as ProviderId[]) {
+      for (const model of CURATED_MODELS[provider as "anthropic" | "openai" | "xai"]) {
+        const ids = thinkingCatalog(provider, model.id).levels.map((level) => level.id);
+        assert.equal(ids.includes("off"), false);
+        assert.equal(ids.includes("none"), false);
+      }
+    }
+    const claude = thinkingCatalog("anthropic", "claude-opus-5-5");
+    const grok = thinkingCatalog("xai", "grok-4.5");
+    assert.equal(selectThinking(grok, "", "xhigh"), "high");
+    assert.equal(selectThinking(claude, "low", "high"), "high");
+    assert.equal(offeredLevel(claude, "off"), undefined);
+    assert.equal(offeredLevel(grok, "xhigh"), undefined);
   });
 
   it("does not invent an Apple Intelligence thinking control", () => {
-    const plan = planThinking("apple", "", "high");
-    assert.equal(plan.anthropic, undefined);
-    assert.equal(plan.openaiReasoningEffort, undefined);
-    assert.match(plan.note ?? "", /no thinking control/);
+    const catalog = thinkingCatalog("apple", "");
+    assert.equal(catalog.levels.length, 0);
+    assert.match(catalog.note ?? "", /no thinking control/);
+  });
+});
+
+describe("cli commands", () => {
+  it("calls claude with effort only when that model offers it", () => {
+    const command = buildProviderCommand({
+      provider: "anthropic",
+      model: "claude-opus-5-5",
+      thinking: "xhigh",
+      prompt: "Hello",
+    });
+    assert.equal(command.command, "claude");
+    assert.ok(command.args.includes("--effort"));
+    assert.equal(command.args[command.args.indexOf("--effort") + 1], "xhigh");
+    assert.ok(command.args.includes("--tools"));
+    const omitted = buildProviderCommand({
+      provider: "anthropic",
+      model: "claude-opus-4-6",
+      thinking: "xhigh",
+      prompt: "Hello",
+    });
+    assert.equal(omitted.args.includes("--effort"), false);
+    assert.equal(command.args.join(" ").includes("api.anthropic.com"), false);
+  });
+
+  it("calls codex exec and does not send Ultra for Luna", () => {
+    const luna = buildProviderCommand({
+      provider: "openai",
+      model: "gpt-6-luna",
+      thinking: "ultra",
+      prompt: "Hello",
+    });
+    assert.equal(luna.command, "codex");
+    assert.equal(luna.args[0], "exec");
+    assert.equal(luna.args.includes("--config"), false);
+    const sol = buildProviderCommand({
+      provider: "openai",
+      model: "gpt-6.1-sol",
+      thinking: "ultra",
+      prompt: "Hello",
+    });
+    assert.ok(sol.args.includes('model_reasoning_effort="ultra"'));
+    assert.equal(sol.args.join(" ").includes("api.openai.com"), false);
+  });
+
+  it("calls grok with --effort and never sends off", () => {
+    const command = buildProviderCommand({
+      provider: "xai",
+      model: "grok-4.7",
+      thinking: "off",
+      prompt: "Hello",
+    });
+    assert.equal(command.command, "grok");
+    assert.equal(command.args[0], "-p");
+    assert.equal(command.args.includes("--effort"), false);
+    const high = buildProviderCommand({
+      provider: "xai",
+      model: "grok-4.5",
+      thinking: "high",
+      prompt: "Hello",
+    });
+    assert.equal(high.args[high.args.indexOf("--effort") + 1], "high");
+  });
+
+  it("calls ollama run with a reported level and does not rename extra high to max", () => {
+    const command = buildProviderCommand({
+      provider: "ollama",
+      model: "qwen3",
+      thinking: "xhigh",
+      prompt: "Hello",
+      ollamaLevels: ["low", "medium", "high"],
+    });
+    assert.equal(command.command, "ollama");
+    assert.equal(command.args.includes("--think=xhigh"), false);
+    assert.equal(command.args.includes("--think=max"), false);
+    const medium = buildProviderCommand({
+      provider: "ollama",
+      model: "qwen3",
+      thinking: "medium",
+      prompt: "Hello",
+      ollamaLevels: ["low", "medium", "high"],
+    });
+    assert.ok(medium.args.includes("--think=medium"));
+  });
+});
+
+describe("binary resolution", () => {
+  it("uses the preference path before common install locations", () => {
+    const home = "/Users/ada";
+    const resolved = resolveCliBinary({
+      command: "claude",
+      preferencePath: "/opt/custom/claude",
+      home,
+      exists: (path) => path === "/opt/custom/claude" || path === `${home}/.local/bin/claude`,
+    });
+    assert.deepEqual(resolved, { path: "/opt/custom/claude" });
+  });
+
+  it("checks common locations when the preference is blank", () => {
+    const home = "/Users/ada";
+    const resolved = resolveCliBinary({
+      command: "codex",
+      preferencePath: "  ",
+      home,
+      exists: (path) => path === "/opt/homebrew/bin/codex",
+    });
+    assert.deepEqual(resolved, { path: "/opt/homebrew/bin/codex" });
+    assert.deepEqual(candidatePaths("ollama", home)[2], "/Applications/Ollama.app/Contents/Resources/ollama");
+  });
+
+  it("reports a missing CLI and does not mention an API key", () => {
+    const resolved = resolveCliBinary({
+      command: "grok",
+      preferencePath: "",
+      home: "/Users/ada",
+      exists: () => false,
+    });
+    assert.ok("error" in resolved);
+    if (!("error" in resolved)) return;
+    assert.match(resolved.error, /`grok` isn't available/);
+    assert.match(resolved.error, /does not fall back to an API key/);
+    assert.doesNotMatch(resolved.error, /add your|password|https?:\/\//i);
+  });
+});
+
+describe("cli output", () => {
+  it("reads Claude stream-json text and thinking deltas", () => {
+    assert.deepEqual(
+      deltasFromClaudeLine(
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Hmm"}}}',
+      ),
+      [{ kind: "thinking", text: "Hmm" }],
+    );
+    assert.deepEqual(
+      deltasFromClaudeLine(
+        '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}}',
+      ),
+      [{ kind: "text", text: "Hi" }],
+    );
+  });
+
+  it("reads Codex agent messages and Grok streaming events", () => {
+    assert.deepEqual(deltasFromCodexLine('{"type":"item.completed","item":{"type":"agent_message","text":"Done"}}'), [
+      { kind: "text", text: "Done" },
+    ]);
+    assert.deepEqual(deltasFromGrokLine('{"type":"thought","data":"Step"}'), [{ kind: "thinking", text: "Step" }]);
+    assert.deepEqual(deltasFromGrokLine('{"type":"text","data":"Answer"}'), [{ kind: "text", text: "Answer" }]);
+  });
+
+  it("splits an Ollama thinking trace from the answer", () => {
+    const deltas: ReplyDelta[] = [];
+    const parser = createOllamaPlainParser((delta) => deltas.push(delta));
+    parser.push("Thinking...\nCount the letters\n...done thinking.\n\nThree");
+    parser.flush();
+    assert.deepEqual(deltas, [
+      { kind: "thinking", text: "Count the letters\n" },
+      { kind: "text", text: "Three" },
+    ]);
   });
 });
 
@@ -108,58 +313,38 @@ describe("model choices", () => {
   });
 });
 
-describe("streams", () => {
-  it("parses Anthropic text and thinking deltas split across chunks", () => {
-    const first = parseSse(
-      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Hmm"}}\n\nevent: content_block_delta\ndata: {"type":"content_block_del',
+describe("ollama cli text", () => {
+  it("parses ollama ls and skips the header", () => {
+    const names = parseOllamaList(
+      "NAME ID SIZE MODIFIED\nllama3.2:latest abc 2GB yesterday\n\ngpt-oss:20b def 10GB today\n",
     );
-    assert.equal(first.events.length, 1);
-    assert.deepEqual(deltasFromAnthropic(first.events[0].data), [{ kind: "thinking", text: "Hmm" }]);
-    const second = parseSse(`${first.rest}ta","delta":{"type":"text_delta","text":"Hi"}}\n\n`);
-    assert.deepEqual(deltasFromAnthropic(second.events[0].data), [{ kind: "text", text: "Hi" }]);
+    assert.deepEqual(names, ["llama3.2:latest", "gpt-oss:20b"]);
   });
 
-  it("parses OpenAI chat chunks and the done marker", () => {
-    assert.deepEqual(deltasFromChatChunk('{"choices":[{"delta":{"content":"Hi","reasoning_content":"Why"}}]}'), [
-      { kind: "thinking", text: "Why" },
-      { kind: "text", text: "Hi" },
-    ]);
-    assert.deepEqual(deltasFromChatChunk("[DONE]"), []);
+  it("reads thinking.values and drops off-style entries", () => {
+    const report = ollamaThinkingFromOutput(
+      "qwen3",
+      JSON.stringify({ thinking: { values: ["low", "medium", "high", false, "off"], default: "medium" } }),
+    );
+    assert.deepEqual(report.values, ["low", "medium", "high"]);
+    assert.equal(report.defaultValue, "medium");
+    assert.equal(report.reported, true);
   });
 
-  it("parses xAI response deltas", () => {
-    assert.deepEqual(
-      deltasFromResponsesEvent(
-        "response.reasoning_summary_text.delta",
-        '{"type":"response.reasoning_summary_text.delta","delta":"Step"}',
-      ),
-      [{ kind: "thinking", text: "Step" }],
-    );
-    assert.deepEqual(
-      deltasFromResponsesEvent("response.output_text.delta", '{"type":"response.output_text.delta","delta":"Answer"}'),
-      [{ kind: "text", text: "Answer" }],
-    );
+  it("uses the documented GPT-OSS levels when show does not print them", () => {
+    const report = ollamaThinkingFromOutput("gpt-oss:20b", " Model\n architecture llama\n");
+    assert.deepEqual(report.values, ["low", "medium", "high"]);
+    assert.equal(report.defaultValue, "medium");
   });
 
-  it("parses Ollama thinking and content lines", () => {
-    assert.deepEqual(deltasFromOllama('{"message":{"thinking":"Count","content":""}}'), [
-      { kind: "thinking", text: "Count" },
-    ]);
-    assert.deepEqual(deltasFromOllama('{"message":{"content":"3"}}'), [{ kind: "text", text: "3" }]);
+  it("does not invent levels for a model show didn't describe", () => {
+    const report = ollamaThinkingFromOutput("llama3.2", " Model\n architecture llama\n");
+    assert.deepEqual(report.values, []);
+    assert.equal(report.reported, false);
   });
 });
 
 describe("errors and storage", () => {
-  it("explains a rejected API key", () => {
-    const message = formatHttpError(401, '{"error":{"message":"invalid x-api-key"}}', "Claude");
-    assert.match(message, /rejected the API key/);
-    assert.match(message, /invalid x-api-key/);
-  });
-
-  it("clips noisy provider bodies", () => {
-    assert.equal(extractErrorMessage("  not json  "), "not json");
-  });
-
   it("ignores corrupt saved prompts", () => {
     assert.deepEqual(parsePrompts("nope"), []);
     assert.equal(parsePrompts(JSON.stringify([{ id: "1", name: "A", body: "B", updatedAt: 2 }])).length, 1);
@@ -189,17 +374,6 @@ describe("desktop handoff", () => {
   });
 });
 
-describe("ollama url", () => {
-  it("defaults and joins API paths", () => {
-    assert.equal(normalizeBaseUrl("  "), "http://127.0.0.1:11434");
-    assert.equal(ollamaApiUrl("http://127.0.0.1:11434/", "/api/tags"), "http://127.0.0.1:11434/api/tags");
-  });
-
-  it("rejects a non-http base URL", () => {
-    assert.throws(() => normalizeBaseUrl("file:///tmp/ollama"), /http/);
-  });
-});
-
 describe("reply view", () => {
   it("shows loading, the answer, and an empty result", () => {
     assert.match(renderReply(view({ pending: true })), /Sending your prompt/);
@@ -208,10 +382,7 @@ describe("reply view", () => {
   });
 
   it("shows a provider failure before any text arrives", () => {
-    assert.match(
-      renderReply(view({ pending: false, error: "Add your OpenAI API key in Raycast extension preferences." })),
-      /Couldn't get a reply/,
-    );
+    assert.match(renderReply(view({ pending: false, error: "`codex` isn't available." })), /Couldn't get a reply/);
   });
 });
 
@@ -221,7 +392,7 @@ function view(overrides: Partial<Parameters<typeof renderReply>[0]>): Parameters
     answer: "",
     providerLabel: "ChatGPT",
     model: "gpt-6-luna",
-    thinkingLabel: "Medium",
+    thinkingLabel: "High",
     pending: false,
     ...overrides,
   };

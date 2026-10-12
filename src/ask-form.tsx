@@ -10,20 +10,14 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { Answer } from "./answer";
+import { resolveCliBinary } from "./lib/binaries";
 import { composePrompt } from "./lib/compose-prompt";
 import { buildModelChoices, selectModel } from "./lib/models";
-import { listOllamaModels } from "./lib/ollama";
-import { apiKeyFor, readPreferences } from "./lib/preferences";
+import { listOllamaModels, readOllamaThinking, type OllamaThinking } from "./lib/ollama";
+import { cliPathFor, readPreferences } from "./lib/preferences";
 import { loadPrompts } from "./lib/prompts";
-import {
-  isProviderId,
-  isThinkingLevel,
-  PROVIDERS,
-  THINKING_LEVELS,
-  type ProviderId,
-  type SavedPrompt,
-  type ThinkingLevel,
-} from "./lib/types";
+import { selectThinking, thinkingCatalog } from "./lib/thinking";
+import { CLI_COMMAND, isProviderId, PROVIDERS, type ProviderId, type SavedPrompt } from "./lib/types";
 
 const MISSING_MODEL = "__missing__";
 
@@ -32,7 +26,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const locked = props.provider;
   const initialProvider = locked ?? preferences.defaultProvider;
   const [provider, setProvider] = useState<ProviderId>(initialProvider);
-  const [thinking, setThinking] = useState<ThinkingLevel>(preferences.defaultThinking);
+  const [thinking, setThinking] = useState(preferences.defaultThinking);
   const [model, setModel] = useState(() =>
     selectModel({
       provider: initialProvider,
@@ -47,6 +41,8 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [ollamaMessage, setOllamaMessage] = useState<string>();
   const [ollamaLoading, setOllamaLoading] = useState(false);
+  const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
+  const [thinkingLoading, setThinkingLoading] = useState(false);
   const { push } = useNavigation();
 
   useEffect(() => {
@@ -67,10 +63,17 @@ export function AskCommand(props: { provider?: ProviderId }) {
 
   useEffect(() => {
     if (provider !== "ollama") return;
+    const resolved = resolveCliBinary({ command: "ollama", preferencePath: preferences.ollamaCliPath });
+    if ("error" in resolved) {
+      setOllamaModels([]);
+      setOllamaMessage(resolved.error);
+      setOllamaLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setOllamaLoading(true);
     setOllamaMessage(undefined);
-    listOllamaModels(preferences.ollamaBaseUrl, controller.signal)
+    listOllamaModels(resolved.path, preferences.ollamaHost, controller.signal)
       .then((models) => {
         setOllamaModels(models);
         setModel((current) =>
@@ -96,7 +99,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         setOllamaModels([]);
-        setOllamaMessage(error instanceof Error ? error.message : "Couldn't reach Ollama.");
+        setOllamaMessage(error instanceof Error ? error.message : "Couldn't list Ollama models.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setOllamaLoading(false);
@@ -104,11 +107,39 @@ export function AskCommand(props: { provider?: ProviderId }) {
     return () => controller.abort();
   }, [
     provider,
-    preferences.ollamaBaseUrl,
+    preferences.ollamaCliPath,
+    preferences.ollamaHost,
     preferences.customModelId,
     preferences.defaultModel,
     preferences.defaultProvider,
   ]);
+
+  useEffect(() => {
+    if (provider !== "ollama" || !model || model === MISSING_MODEL) {
+      setOllamaThinking(undefined);
+      setThinkingLoading(false);
+      return;
+    }
+    const resolved = resolveCliBinary({ command: "ollama", preferencePath: preferences.ollamaCliPath });
+    if ("error" in resolved) {
+      setOllamaThinking({ values: [], reported: false });
+      setThinkingLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setThinkingLoading(true);
+    readOllamaThinking(resolved.path, model, preferences.ollamaHost, controller.signal)
+      .then((report) => setOllamaThinking(report))
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setOllamaThinking({ values: [], reported: false });
+        setOllamaMessage(error instanceof Error ? error.message : "Couldn't read this model's thinking levels.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setThinkingLoading(false);
+      });
+    return () => controller.abort();
+  }, [provider, model, preferences.ollamaCliPath, preferences.ollamaHost]);
 
   const modelInput = {
     provider,
@@ -119,6 +150,19 @@ export function AskCommand(props: { provider?: ProviderId }) {
   };
   const choices = buildModelChoices(modelInput);
   const modelValue = choices.some((choice) => choice.id === model) ? model : (choices[0]?.id ?? MISSING_MODEL);
+  const catalog =
+    provider === "ollama" && (thinkingLoading || !ollamaThinking)
+      ? { levels: [], note: "Checking this model's thinking levels…" }
+      : thinkingCatalog(
+          provider,
+          provider === "apple" ? "" : modelValue,
+          provider === "ollama" ? ollamaThinking : undefined,
+        );
+  const thinkingValue = selectThinking(catalog, preferences.defaultThinking, thinking);
+
+  useEffect(() => {
+    if (thinkingValue !== thinking) setThinking(thinkingValue);
+  }, [thinkingValue, thinking]);
 
   async function handleSubmit(values: { prompt?: string; templateId?: string }) {
     const templateId = values.templateId ?? "none";
@@ -149,18 +193,27 @@ export function AskCommand(props: { provider?: ProviderId }) {
       <Answer
         provider={provider}
         model={provider === "apple" ? "" : modelValue}
-        thinking={thinking}
+        thinking={thinkingValue}
+        thinkingLabel={catalog.levels.find((level) => level.id === thinkingValue)?.title ?? "CLI default"}
+        note={catalog.note}
         prompt={prompt}
-        apiKey={apiKeyFor(preferences, provider)}
-        ollamaBaseUrl={preferences.ollamaBaseUrl}
         appleShortcutName={preferences.appleShortcutName}
+        ollamaHost={preferences.ollamaHost}
+        ollamaLevels={provider === "ollama" ? (ollamaThinking?.values ?? []) : []}
+        claudeCliPath={preferences.claudeCliPath}
+        codexCliPath={preferences.codexCliPath}
+        grokCliPath={preferences.grokCliPath}
+        ollamaCliPath={preferences.ollamaCliPath}
+        shortcutsCliPath={preferences.shortcutsCliPath}
       />,
     );
   }
 
+  const cliHint = `\`${CLI_COMMAND[provider]}\` · ${cliPathFor(preferences, CLI_COMMAND[provider]) || "common install locations"}`;
+
   return (
     <Form
-      isLoading={prompts === undefined || ollamaLoading}
+      isLoading={prompts === undefined || ollamaLoading || thinkingLoading}
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Ask" onSubmit={handleSubmit} icon={Icon.SpeechBubble} />
@@ -174,7 +227,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
     >
       <Form.Description
         title="How Asking Works"
-        text="Pick a saved prompt to start from it. Anything you type here is added after that template."
+        text="Pick a saved prompt to start from it. Anything you type here is added after that template. The reply comes from the local CLI you already signed in to."
       />
       <Form.TextArea id="prompt" title="Prompt" placeholder="What do you want to know?" autoFocus enableMarkdown />
       <Form.Dropdown id="templateId" title="Saved Prompt" defaultValue="none">
@@ -200,6 +253,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
                 provider: value,
               }),
             );
+            setOllamaThinking(undefined);
           }}
         >
           {PROVIDERS.map((item) => (
@@ -210,10 +264,18 @@ export function AskCommand(props: { provider?: ProviderId }) {
       {provider === "apple" ? (
         <Form.Description
           title="Model"
-          text={`Runs the “${preferences.appleShortcutName}” shortcut. Apple Intelligence has no third-party model API.`}
+          text={`Runs the “${preferences.appleShortcutName}” shortcut with the shortcuts command.`}
         />
       ) : (
-        <Form.Dropdown id="model" title="Model" value={modelValue} onChange={setModel}>
+        <Form.Dropdown
+          id="model"
+          title="Model"
+          value={modelValue}
+          onChange={(value) => {
+            setModel(value);
+            setOllamaThinking(undefined);
+          }}
+        >
           {choices.length > 0 ? (
             choices.map((choice) => <Form.Dropdown.Item key={choice.id} value={choice.id} title={choice.title} />)
           ) : (
@@ -222,19 +284,16 @@ export function AskCommand(props: { provider?: ProviderId }) {
         </Form.Dropdown>
       )}
       {provider === "ollama" && ollamaMessage ? <Form.Description title="Ollama" text={ollamaMessage} /> : null}
-      <Form.Dropdown
-        id="thinking"
-        title="Thinking"
-        value={thinking}
-        info="Claude uses effort and thinking. ChatGPT uses reasoning_effort. Grok uses reasoning effort. Ollama uses think."
-        onChange={(value) => {
-          if (isThinkingLevel(value)) setThinking(value);
-        }}
-      >
-        {THINKING_LEVELS.map((level) => (
-          <Form.Dropdown.Item key={level.id} value={level.id} title={level.title} />
-        ))}
-      </Form.Dropdown>
+      {catalog.levels.length > 0 ? (
+        <Form.Dropdown id="thinking" title="Thinking" value={thinkingValue} info={cliHint} onChange={setThinking}>
+          {catalog.levels.map((level) => (
+            <Form.Dropdown.Item key={level.id} value={level.id} title={level.title} />
+          ))}
+        </Form.Dropdown>
+      ) : (
+        <Form.Description title="Thinking" text={catalog.note ?? "This model has no thinking levels."} />
+      )}
+      <Form.Description title="Command" text={cliHint} />
     </Form>
   );
 }

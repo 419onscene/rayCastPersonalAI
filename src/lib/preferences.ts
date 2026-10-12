@@ -1,28 +1,27 @@
 import { getPreferenceValues } from "@raycast/api";
-import { isProviderId, isThinkingLevel, type ExtensionPreferences, type ProviderId, type ThinkingLevel } from "./types";
+import { type CliName, type ExtensionPreferences, isProviderId } from "./types";
 
 export function readPreferences(): ExtensionPreferences {
   const values = getPreferenceValues<ExtensionPreferences>();
   return {
     defaultProvider: isProviderId(values.defaultProvider) ? values.defaultProvider : "anthropic",
     defaultModel: values.defaultModel?.trim() ?? "",
-    defaultThinking: isThinkingLevel(values.defaultThinking) ? values.defaultThinking : "medium",
+    defaultThinking: values.defaultThinking?.trim() ?? "",
     customModelId: values.customModelId?.trim() ?? "",
-    ollamaBaseUrl: values.ollamaBaseUrl?.trim() || "http://127.0.0.1:11434",
+    ollamaHost: values.ollamaHost?.trim() ?? "",
     appleShortcutName: values.appleShortcutName?.trim() || "Ask Apple Intelligence",
-    anthropicApiKey: values.anthropicApiKey ?? "",
-    openaiApiKey: values.openaiApiKey ?? "",
-    xaiApiKey: values.xaiApiKey ?? "",
+    claudeCliPath: values.claudeCliPath?.trim() ?? "",
+    codexCliPath: values.codexCliPath?.trim() ?? "",
+    grokCliPath: values.grokCliPath?.trim() ?? "",
+    ollamaCliPath: values.ollamaCliPath?.trim() ?? "",
+    shortcutsCliPath: values.shortcutsCliPath?.trim() ?? "",
   };
 }
 
-export function apiKeyFor(preferences: ExtensionPreferences, provider: ProviderId): string {
-  if (provider === "anthropic") return preferences.anthropicApiKey;
-  if (provider === "openai") return preferences.openaiApiKey;
-  if (provider === "xai") return preferences.xaiApiKey;
-  return "";
-}
-
-export function initialThinking(preferences: ExtensionPreferences): ThinkingLevel {
-  return preferences.defaultThinking;
+export function cliPathFor(preferences: ExtensionPreferences, command: CliName): string {
+  if (command === "claude") return preferences.claudeCliPath;
+  if (command === "codex") return preferences.codexCliPath;
+  if (command === "grok") return preferences.grokCliPath;
+  if (command === "ollama") return preferences.ollamaCliPath;
+  return preferences.shortcutsCliPath;
 }

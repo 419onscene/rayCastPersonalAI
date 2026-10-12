@@ -1,17 +1,19 @@
 export type ProviderId = "anthropic" | "openai" | "xai" | "ollama" | "apple";
 
-export type ThinkingLevel = "off" | "low" | "medium" | "high" | "xhigh";
+export type CliName = "claude" | "codex" | "grok" | "ollama" | "shortcuts";
 
 export interface ExtensionPreferences {
   defaultProvider: ProviderId;
   defaultModel: string;
-  defaultThinking: ThinkingLevel;
+  defaultThinking: string;
   customModelId: string;
-  ollamaBaseUrl: string;
+  ollamaHost: string;
   appleShortcutName: string;
-  anthropicApiKey: string;
-  openaiApiKey: string;
-  xaiApiKey: string;
+  claudeCliPath: string;
+  codexCliPath: string;
+  grokCliPath: string;
+  ollamaCliPath: string;
+  shortcutsCliPath: string;
 }
 
 export interface SavedPrompt {
@@ -34,12 +36,12 @@ export const PROVIDER_LABEL: Record<ProviderId, string> = {
   apple: "Apple Intelligence",
 };
 
-export const THINKING_LABEL: Record<ThinkingLevel, string> = {
-  off: "Off",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
+export const CLI_COMMAND: Record<ProviderId, CliName> = {
+  anthropic: "claude",
+  openai: "codex",
+  xai: "grok",
+  ollama: "ollama",
+  apple: "shortcuts",
 };
 
 export const PROVIDERS: { id: ProviderId; title: string }[] = [
@@ -50,18 +52,6 @@ export const PROVIDERS: { id: ProviderId; title: string }[] = [
   { id: "apple", title: "Apple Intelligence" },
 ];
 
-export const THINKING_LEVELS: { id: ThinkingLevel; title: string }[] = [
-  { id: "off", title: "Off" },
-  { id: "low", title: "Low" },
-  { id: "medium", title: "Medium" },
-  { id: "high", title: "High" },
-  { id: "xhigh", title: "Extra high" },
-];
-
 export function isProviderId(value: string): value is ProviderId {
   return PROVIDERS.some((provider) => provider.id === value);
-}
-
-export function isThinkingLevel(value: string): value is ThinkingLevel {
-  return THINKING_LEVELS.some((level) => level.id === value);
 }

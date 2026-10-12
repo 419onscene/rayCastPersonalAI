@@ -2,7 +2,7 @@ import { Action, ActionPanel, Detail, Icon, openExtensionPreferences } from "@ra
 import { useEffect, useRef, useState } from "react";
 import { generateReply, type GenerateInput } from "./lib/providers";
 import { renderReply } from "./lib/render-reply";
-import { PROVIDER_LABEL, THINKING_LABEL } from "./lib/types";
+import { PROVIDER_LABEL } from "./lib/types";
 
 export function Answer(props: GenerateInput) {
   const [thinkingText, setThinkingText] = useState("");
@@ -77,14 +77,14 @@ export function Answer(props: GenerateInput) {
     answer,
     providerLabel: PROVIDER_LABEL[props.provider],
     model: props.model,
-    thinkingLabel: THINKING_LABEL[props.thinking],
+    thinkingLabel: props.thinkingLabel,
     note,
     error,
     stopped: stopped && !error,
     pending,
   });
   const copyText = answer || thinkingText;
-  const showPreferences = Boolean(error && /api key|preferences|shortcut name/i.test(error));
+  const showPreferences = Boolean(error && /preferences|shortcut|isn't available|couldn't be started/i.test(error));
 
   return (
     <Detail
