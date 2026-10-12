@@ -50,7 +50,7 @@ Each command is declared separately so you can bind them independently:
 
 ## Local CLIs
 
-Raycast does not inherit your shell PATH. Each Ask command looks for a preference path first, then common install locations. If the binary is missing, the reply says so. There is no API-key fallback.
+Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with your Mac account name, so you can leave that text as it is. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
 
 | Provider           | Binary      | What it runs                                                                                                 |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------ |
@@ -64,7 +64,7 @@ ChatGPT uses the Codex CLI. That is the official local CLI you sign in to with C
 
 Grok uses the Grok CLI (`grok`), the official local CLI from the Grok build tools. Claude uses Claude Code (`claude`). Ollama uses `ollama`.
 
-Search order when the preference path is blank:
+Search order after the prefilled path:
 
 - Claude: `~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`
 - Codex: `~/.local/bin/codex`, `/opt/homebrew/bin/codex`, `/usr/local/bin/codex`
@@ -72,7 +72,17 @@ Search order when the preference path is blank:
 - Ollama: `/usr/local/bin/ollama`, `/opt/homebrew/bin/ollama`, `/Applications/Ollama.app/Contents/Resources/ollama`, `~/.local/bin/ollama`
 - Shortcuts: `/usr/bin/shortcuts`
 
-If you set a path and that file is missing, the command stops instead of silently using another binary.
+If you replace a prefilled path with a different file and that file is missing, the command stops.
+
+Sign in once in Terminal before the first Ask. Raycast runs each CLI without a terminal prompt, so the browser login happens in Terminal and is saved for later:
+
+```bash
+claude auth login
+codex login
+grok login
+```
+
+Ollama's local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below, not a CLI login.
 
 Claude is started with `--tools` set to an empty list so the reply does not edit files. Codex runs `exec` in a read-only sandbox. Grok is limited to one turn. These CLIs are still the same programs you use in a terminal, so a future CLI release can change a flag. The reply shows the CLI's own error when that happens.
 
@@ -87,13 +97,13 @@ Open **Raycast Settings → Extensions → Personal AI**.
 | Default Thinking            | A level id, such as `medium`. Applied only when the selected model offers it.            |
 | Ollama Host                 | Optional `OLLAMA_HOST` for the `ollama` command. Leave blank for the CLI default.        |
 | Apple Intelligence Shortcut | Shortcut name. Defaults to `Ask Apple Intelligence`.                                     |
-| Claude CLI Path             | Optional full path to `claude`.                                                          |
-| Codex CLI Path              | Optional full path to `codex`.                                                           |
-| Grok CLI Path               | Optional full path to `grok`.                                                            |
-| Ollama CLI Path             | Optional full path to `ollama`.                                                          |
-| Shortcuts CLI Path          | Optional full path to `shortcuts`.                                                       |
+| Claude CLI Path             | Prefilled as `/Users/<your-user-name>/.local/bin/claude`.                                |
+| Codex CLI Path              | Prefilled as `/Users/<your-user-name>/.local/bin/codex`.                                 |
+| Grok CLI Path               | Prefilled as `/Users/<your-user-name>/.local/bin/grok`.                                  |
+| Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                    |
+| Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                       |
 
-There are no API-key preferences. Sign in with each CLI itself (`claude`, `codex`, `grok`, `ollama signin` when you use Ollama accounts).
+There are no API-key preferences. Sign in from Terminal with `claude auth login`, `codex login`, and `grok login`. Ask reuses that saved login.
 
 ## Saved prompts
 

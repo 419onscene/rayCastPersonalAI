@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatShortcutError } from "./apple";
-import { candidatePaths, resolveCliBinary } from "./binaries";
+import { candidatePaths, expandCliPath, resolveCliBinary } from "./binaries";
 import { buildProviderCommand } from "./cli-command";
 import { createOllamaPlainParser, deltasFromClaudeLine, deltasFromCodexLine, deltasFromGrokLine } from "./cli-output";
 import { composePrompt } from "./compose-prompt";
@@ -246,6 +246,28 @@ describe("binary resolution", () => {
       exists: (path) => path === "/opt/custom/claude" || path === `${home}/.local/bin/claude`,
     });
     assert.deepEqual(resolved, { path: "/opt/custom/claude" });
+  });
+
+  it("replaces <your-user-name> and keeps searching when that file is missing", () => {
+    const home = "/Users/ada";
+    assert.equal(expandCliPath("/Users/<your-user-name>/.local/bin/claude", home), `${home}/.local/bin/claude`);
+    const resolved = resolveCliBinary({
+      command: "claude",
+      preferencePath: "/Users/<your-user-name>/.local/bin/claude",
+      home,
+      exists: (path) => path === "/opt/homebrew/bin/claude",
+    });
+    assert.deepEqual(resolved, { path: "/opt/homebrew/bin/claude" });
+  });
+
+  it("uses the prefilled home path when that file exists", () => {
+    const resolved = resolveCliBinary({
+      command: "claude",
+      preferencePath: "/Users/<your-user-name>/.local/bin/claude",
+      home: "/Users/ada",
+      exists: (path) => path === "/Users/ada/.local/bin/claude",
+    });
+    assert.deepEqual(resolved, { path: "/Users/ada/.local/bin/claude" });
   });
 
   it("checks common locations when the preference is blank", () => {

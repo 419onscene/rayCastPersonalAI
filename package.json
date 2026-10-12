@@ -196,46 +196,46 @@
     {
       "name": "claudeCliPath",
       "title": "Claude CLI Path",
-      "description": "Optional full path to the claude binary. Leave blank to check ~/.local/bin, Homebrew, and /usr/local/bin.",
+      "description": "Prefilled with the usual location. <your-user-name> is replaced with your Mac account name. If that file is missing, Homebrew and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
-      "default": "",
-      "placeholder": "/Users/you/.local/bin/claude"
+      "default": "/Users/<your-user-name>/.local/bin/claude",
+      "placeholder": "/Users/<your-user-name>/.local/bin/claude"
     },
     {
       "name": "codexCliPath",
       "title": "Codex CLI Path",
-      "description": "Optional full path to the codex binary, the official local ChatGPT CLI. Leave blank to check common install locations.",
+      "description": "Prefilled with the usual location of the Codex CLI. <your-user-name> is replaced with your Mac account name. If that file is missing, Homebrew and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
-      "default": "",
-      "placeholder": "/Users/you/.local/bin/codex"
+      "default": "/Users/<your-user-name>/.local/bin/codex",
+      "placeholder": "/Users/<your-user-name>/.local/bin/codex"
     },
     {
       "name": "grokCliPath",
       "title": "Grok CLI Path",
-      "description": "Optional full path to the grok binary. Leave blank to check ~/.local/bin, ~/.grok/bin, Homebrew, and /usr/local/bin.",
+      "description": "Prefilled with the usual location. <your-user-name> is replaced with your Mac account name. If that file is missing, ~/.grok/bin, Homebrew, and /usr/local/bin are checked too.",
       "type": "textfield",
       "required": false,
-      "default": "",
-      "placeholder": "/Users/you/.local/bin/grok"
+      "default": "/Users/<your-user-name>/.local/bin/grok",
+      "placeholder": "/Users/<your-user-name>/.local/bin/grok"
     },
     {
       "name": "ollamaCliPath",
       "title": "Ollama CLI Path",
-      "description": "Optional full path to the ollama binary. Leave blank to check Homebrew, /usr/local/bin, and the Ollama app bundle.",
+      "description": "Prefilled with the usual Mac location. If that file is missing, Homebrew, the Ollama app, and ~/.local/bin are checked too.",
       "type": "textfield",
       "required": false,
-      "default": "",
+      "default": "/usr/local/bin/ollama",
       "placeholder": "/usr/local/bin/ollama"
     },
     {
       "name": "shortcutsCliPath",
       "title": "Shortcuts CLI Path",
-      "description": "Optional full path to the shortcuts binary. Leave blank to use /usr/bin/shortcuts.",
+      "description": "Prefilled with the macOS shortcuts command.",
       "type": "textfield",
       "required": false,
-      "default": "",
+      "default": "/usr/bin/shortcuts",
       "placeholder": "/usr/bin/shortcuts"
     }
   ],

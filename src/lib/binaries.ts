@@ -40,6 +40,13 @@ export function candidatePaths(command: CliName, home: string): string[] {
   return ["/usr/bin/shortcuts"];
 }
 
+const USER_PLACEHOLDER = "<your-user-name>";
+
+export function expandCliPath(path: string, home: string): string {
+  const user = home.split("/").filter(Boolean).pop() ?? "";
+  return path.trim().replaceAll(USER_PLACEHOLDER, user);
+}
+
 export function resolveCliBinary(input: {
   command: CliName;
   preferencePath: string;
@@ -48,14 +55,16 @@ export function resolveCliBinary(input: {
 }): { path: string } | { error: string } {
   const home = input.home ?? homedir();
   const exists = input.exists ?? fileExists;
-  const preference = input.preferencePath.trim();
+  const preference = expandCliPath(input.preferencePath, home);
   const candidates = candidatePaths(input.command, home);
 
   if (preference) {
     if (exists(preference)) return { path: preference };
-    return {
-      error: missingCliMessage(input.command, [preference, ...candidates], true),
-    };
+    if (!candidates.includes(preference)) {
+      return {
+        error: missingCliMessage(input.command, [preference, ...candidates], true),
+      };
+    }
   }
 
   for (const path of candidates) {
