@@ -12,6 +12,7 @@ export interface ThinkingCatalog {
 }
 
 const TITLES: Record<string, string> = {
+  minimal: "Minimal",
   low: "Low",
   medium: "Medium",
   high: "High",
@@ -69,7 +70,7 @@ export function levelTitle(id: string): string {
 export function thinkingCatalog(
   provider: ProviderId,
   model: string,
-  ollama?: { values: string[]; defaultValue?: string; reported: boolean },
+  reported?: { values: string[]; defaultValue?: string; reported: boolean },
 ): ThinkingCatalog {
   if (provider === "apple") {
     return {
@@ -79,13 +80,25 @@ export function thinkingCatalog(
   }
 
   if (provider === "ollama") {
-    if (!ollama?.reported) {
+    if (!reported?.reported) {
       return {
         levels: [],
         note: "Ollama didn't report thinking levels for this model, so this run won't pass --think.",
       };
     }
-    return catalogFrom(ollama.values, ollama.defaultValue);
+    return reportedCatalog(
+      reported.values,
+      reported.defaultValue,
+      "Ollama reported no thinking levels for this model, so this run won't pass --think.",
+    );
+  }
+
+  if (reported?.reported) {
+    return reportedCatalog(
+      reported.values,
+      reported.defaultValue,
+      "This model reported no thinking levels, so this run won't pass an effort flag.",
+    );
   }
 
   const known = lookup(provider, model);
@@ -130,10 +143,21 @@ function modelKey(model: string): string {
   return slash.split(":").shift() ?? slash;
 }
 
+function reportedCatalog(levels: string[], defaultLevel: string | undefined, emptyNote: string): ThinkingCatalog {
+  const catalog = catalogFrom(levels, defaultLevel);
+  if (catalog.levels.length === 0) return { levels: [], note: emptyNote };
+  return catalog;
+}
+
 function catalogFrom(levels: string[], defaultLevel?: string): ThinkingCatalog {
-  const options = levels.map((id) => ({ id, title: levelTitle(id) }));
-  const fallback = defaultLevel && levels.includes(defaultLevel) ? defaultLevel : levels[0];
+  const kept = withoutOff(levels);
+  const options = kept.map((id) => ({ id, title: levelTitle(id) }));
+  const fallback = defaultLevel && kept.includes(defaultLevel) ? defaultLevel : kept[0];
   return { levels: options, defaultLevel: fallback };
+}
+
+function withoutOff(levels: string[]): string[] {
+  return levels.filter((level) => level !== "off" && level !== "none" && level !== "false");
 }
 
 function unlistedNote(provider: ProviderId): string {

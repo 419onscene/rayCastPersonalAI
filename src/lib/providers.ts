@@ -21,7 +21,8 @@ export interface GenerateInput {
   prompt: string;
   appleShortcutName: string;
   ollamaHost: string;
-  ollamaLevels: string[];
+  thinkingLevels: string[];
+  listError?: string;
   claudeCliPath: string;
   codexCliPath: string;
   grokCliPath: string;
@@ -38,6 +39,7 @@ export async function generateReply(
   },
 ): Promise<void> {
   handlers.onNote(input.note);
+  if (input.listError) throw new Error(input.listError);
 
   if (input.provider === "apple") {
     const binary = resolveOrThrow("shortcuts", input.shortcutsCliPath);
@@ -52,7 +54,7 @@ export async function generateReply(
   }
 
   if (!input.model.trim()) {
-    throw new Error(input.provider === "ollama" ? "Pick an Ollama model, or set a custom model id." : "Pick a model.");
+    throw new Error("Pick a model from the account list.");
   }
 
   const command = buildProviderCommand({
@@ -60,7 +62,7 @@ export async function generateReply(
     model: input.model,
     thinking: input.thinking,
     prompt: input.prompt,
-    ollamaLevels: input.ollamaLevels,
+    thinkingLevels: input.thinkingLevels,
   });
   const binary = resolveOrThrow(command.command, preferencePath(input, command.command));
   const env = commandEnv(

@@ -41,7 +41,7 @@ export function ollamaThinkingFromOutput(model: string, stdout: string): OllamaT
 }
 
 export async function listOllamaModels(binary: string, host: string, signal?: AbortSignal): Promise<string[]> {
-  const result = await runCommand(binary, ["ls"], { signal, env: ollamaEnv(binary, host) });
+  const result = await runCommand(binary, ["list"], { signal, env: ollamaEnv(binary, host) });
   return parseOllamaList(result.stdout);
 }
 

@@ -11,7 +11,7 @@ export function buildProviderCommand(input: {
   model: string;
   thinking: string;
   prompt: string;
-  ollamaLevels?: string[];
+  thinkingLevels?: string[];
 }): ProviderCommand {
   const level = allowedLevel(input);
   if (input.provider === "anthropic") return { command: "claude", args: claudeArgs(input.model, input.prompt, level) };
@@ -24,15 +24,13 @@ function allowedLevel(input: {
   provider: Exclude<ProviderId, "apple">;
   model: string;
   thinking: string;
-  ollamaLevels?: string[];
+  thinkingLevels?: string[];
 }): string | undefined {
-  if (input.provider === "ollama") {
-    const levels = input.ollamaLevels ?? [];
-    const thinking = input.thinking.trim();
-    if (!thinking || thinking === "off" || thinking === "none") return undefined;
-    return levels.includes(thinking) ? thinking : undefined;
-  }
-  return offeredLevel(thinkingCatalog(input.provider, input.model), input.thinking);
+  const thinking = input.thinking.trim();
+  if (!thinking || thinking === "off" || thinking === "none") return undefined;
+  if (input.thinkingLevels) return input.thinkingLevels.includes(thinking) ? thinking : undefined;
+  if (input.provider === "ollama") return undefined;
+  return offeredLevel(thinkingCatalog(input.provider, input.model), thinking);
 }
 
 function claudeArgs(model: string, prompt: string, effort?: string): string[] {

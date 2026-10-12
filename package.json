@@ -160,11 +160,11 @@
     {
       "name": "defaultModel",
       "title": "Default Model",
-      "description": "Model id used when a command does not override it. Leave blank to use that provider's recommended model.",
+      "description": "Model id to select when that provider's account list includes it. Leave blank to use the CLI's default, or the first model it returns.",
       "type": "textfield",
       "required": false,
       "default": "",
-      "placeholder": "claude-opus-5-5"
+      "placeholder": "model id from the account list"
     },
     {
       "name": "defaultThinking",
@@ -174,15 +174,6 @@
       "required": false,
       "default": "",
       "placeholder": "medium"
-    },
-    {
-      "name": "customModelId",
-      "title": "Custom Model",
-      "description": "Optional model id added to the model dropdown for whichever provider you select.",
-      "type": "textfield",
-      "required": false,
-      "default": "",
-      "placeholder": "my-org/custom-model"
     },
     {
       "name": "ollamaHost",

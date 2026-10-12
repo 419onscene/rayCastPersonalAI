@@ -6,7 +6,15 @@ import { buildProviderCommand } from "./cli-command";
 import { createOllamaPlainParser, deltasFromClaudeLine, deltasFromCodexLine, deltasFromGrokLine } from "./cli-output";
 import { composePrompt } from "./compose-prompt";
 import { chatGptPasteScript, chatgptDesktopUrl, claudeDesktopUrl, CLAUDE_PROMPT_LIMIT } from "./desktop";
-import { CURATED_MODELS, buildModelChoices, selectModel } from "./models";
+import {
+  CLAUDE_MODELS_UNAVAILABLE,
+  emptyModelListMessage,
+  modelListInvocation,
+  parseCodexModels,
+  parseGrokModels,
+  parseModelList,
+  selectAccountModel,
+} from "./models";
 import { ollamaThinkingFromOutput, parseOllamaList } from "./ollama";
 import { parsePrompts } from "./prompt-json";
 import { renderReply } from "./render-reply";
@@ -97,13 +105,38 @@ describe("thinking catalogs", () => {
     assert.match(silent.note ?? "", /won't pass --think/);
   });
 
+  it("uses reported effort levels and does not fall back when that list is empty", () => {
+    const reported = thinkingCatalog("openai", "gpt-6-astra", {
+      values: ["minimal", "low", "none"],
+      defaultValue: "minimal",
+      reported: true,
+    });
+    assert.deepEqual(
+      reported.levels.map((level) => level.id),
+      ["minimal", "low"],
+    );
+    assert.equal(reported.defaultLevel, "minimal");
+    const empty = thinkingCatalog("openai", "gpt-6-astra", { values: [], reported: true });
+    assert.equal(empty.levels.length, 0);
+    assert.match(empty.note ?? "", /reported no thinking levels/);
+    assert.equal(thinkingCatalog("xai", "grok-4.7").levels.length > 0, true);
+  });
+
   it("does not offer Off, and does not keep a level the next model lacks", () => {
-    for (const provider of ["anthropic", "openai", "xai"] as ProviderId[]) {
-      for (const model of CURATED_MODELS[provider as "anthropic" | "openai" | "xai"]) {
-        const ids = thinkingCatalog(provider, model.id).levels.map((level) => level.id);
-        assert.equal(ids.includes("off"), false);
-        assert.equal(ids.includes("none"), false);
-      }
+    const samples: [ProviderId, string][] = [
+      ["anthropic", "claude-opus-5-5"],
+      ["anthropic", "claude-opus-4-6"],
+      ["openai", "gpt-6-astra"],
+      ["openai", "gpt-6.1-sol"],
+      ["openai", "gpt-6-luna"],
+      ["xai", "grok-4.7"],
+      ["xai", "grok-4.5"],
+      ["xai", "grok-4.20-multi-agent"],
+    ];
+    for (const [provider, model] of samples) {
+      const ids = thinkingCatalog(provider, model).levels.map((level) => level.id);
+      assert.equal(ids.includes("off"), false);
+      assert.equal(ids.includes("none"), false);
     }
     const claude = thinkingCatalog("anthropic", "claude-opus-5-5");
     const grok = thinkingCatalog("xai", "grok-4.5");
@@ -187,7 +220,7 @@ describe("cli commands", () => {
       model: "qwen3",
       thinking: "xhigh",
       prompt: "Hello",
-      ollamaLevels: ["low", "medium", "high"],
+      thinkingLevels: ["low", "medium", "high"],
     });
     assert.equal(command.command, "ollama");
     assert.equal(command.args.includes("--think=xhigh"), false);
@@ -197,7 +230,7 @@ describe("cli commands", () => {
       model: "qwen3",
       thinking: "medium",
       prompt: "Hello",
-      ollamaLevels: ["low", "medium", "high"],
+      thinkingLevels: ["low", "medium", "high"],
     });
     assert.ok(medium.args.includes("--think=medium"));
   });
@@ -278,43 +311,137 @@ describe("cli output", () => {
   });
 });
 
-describe("model choices", () => {
-  const base = {
-    defaultProvider: "anthropic" as const,
-    installedOllamaModels: [],
-    defaultModel: "claude-haiku-5-5",
-    customModelId: "my-model",
-  };
-
-  it("uses the curated Claude list, the custom id, and the default model", () => {
-    const choices = buildModelChoices({ ...base, provider: "anthropic" });
-    assert.ok(choices.some((choice) => choice.id === "claude-opus-5-5"));
-    assert.ok(choices.some((choice) => choice.id === "my-model"));
-    assert.equal(selectModel({ ...base, provider: "anthropic" }), "claude-haiku-5-5");
+describe("account model lists", () => {
+  it("names the command each CLI uses to list models", () => {
+    assert.deepEqual(modelListInvocation("openai"), { command: "codex", args: ["debug", "models"] });
+    assert.deepEqual(modelListInvocation("xai"), { command: "grok", args: ["models"] });
+    assert.deepEqual(modelListInvocation("ollama"), { command: "ollama", args: ["list"] });
+    const claude = modelListInvocation("anthropic");
+    assert.ok("error" in claude);
+    if ("error" in claude) {
+      assert.equal(claude.error, CLAUDE_MODELS_UNAVAILABLE);
+      assert.match(claude.error, /will not substitute a built-in model catalog/);
+    }
+    const apple = modelListInvocation("apple");
+    assert.ok("error" in apple);
+    if ("error" in apple) assert.match(apple.error, /no model menu/);
   });
 
-  it("does not force a Claude default model onto ChatGPT", () => {
-    assert.equal(selectModel({ ...base, provider: "openai" }), "gpt-6-astra");
-  });
-
-  it("lists installed Ollama models and keeps a valid current choice", () => {
-    const input = {
-      ...base,
-      provider: "ollama" as const,
-      defaultProvider: "ollama" as const,
-      installedOllamaModels: ["llama3.2", "qwen3"],
-      defaultModel: "qwen3",
-    };
-    assert.deepEqual(
-      buildModelChoices(input).map((choice) => choice.id),
-      ["llama3.2", "qwen3", "my-model"],
+  it("reads Codex picker models and their reported efforts", () => {
+    const models = parseCodexModels(
+      JSON.stringify({
+        models: [
+          {
+            slug: "gpt-hidden",
+            display_name: "Hidden",
+            visibility: "hide",
+            supported_reasoning_levels: ["low", "high"],
+            priority: 100,
+          },
+          {
+            slug: "gpt-6-luna",
+            display_name: "Luna",
+            visibility: "list",
+            supported_in_api: false,
+            supported_reasoning_levels: ["low", "medium", "extra_high", "none"],
+            default_reasoning_level: "medium",
+            priority: 2,
+          },
+          {
+            slug: "gpt-6-sol",
+            display_name: "Sol",
+            visibility: "list",
+            priority: 5,
+          },
+          {
+            model: "gpt-default",
+            display_name: "Default",
+            is_default: true,
+            show_in_picker: true,
+            supported_reasoning_efforts: [{ effort: "low", description: "Light" }],
+            default_reasoning_effort: "low",
+            priority: 0,
+          },
+          { slug: "gpt-quiet", visibility: "none" },
+          { slug: "gpt-api-only", show_in_picker: false, supported_reasoning_levels: ["high"] },
+        ],
+      }),
     );
-    assert.equal(selectModel(input, "llama3.2"), "llama3.2");
+    assert.deepEqual(
+      models.map((model) => model.id),
+      ["gpt-default", "gpt-6-sol", "gpt-6-luna"],
+    );
+    assert.equal(models[0]?.default, true);
+    assert.deepEqual(models[0]?.efforts?.values, ["low"]);
+    assert.equal(models[1]?.efforts, undefined);
+    assert.deepEqual(models[2]?.efforts?.values, ["low", "medium", "xhigh"]);
+    assert.equal(models[2]?.efforts?.defaultValue, "medium");
+    assert.equal(models[2]?.efforts?.reported, true);
+  });
+
+  it("treats an empty Codex effort list as a report", () => {
+    const models = parseCodexModels(
+      JSON.stringify({ models: [{ slug: "gpt-6-astra", supported_reasoning_levels: ["off", "none"] }] }),
+    );
+    assert.equal(models[0]?.efforts?.reported, true);
+    assert.deepEqual(models[0]?.efforts?.values, []);
+  });
+
+  it("reads Grok JSON, including a string list, and plain text", () => {
+    const jsonModels = parseGrokModels(
+      JSON.stringify({
+        models: [
+          { id: "grok-4.7", display_name: "Grok 4.7", reasoning_efforts: ["low", "high", "false"] },
+          { id: "grok-hidden", user_selectable: false },
+          "grok-4.5",
+        ],
+      }),
+    );
+    assert.deepEqual(
+      jsonModels.map((model) => model.id),
+      ["grok-4.7", "grok-4.5"],
+    );
+    assert.deepEqual(jsonModels[0]?.efforts?.values, ["low", "high"]);
+    assert.equal(jsonModels[1]?.efforts, undefined);
+
+    const textModels = parseGrokModels("MODEL\ngrok-4.6  Grok 4.6\n(not a model)\n");
+    assert.deepEqual(
+      textModels.map((model) => model.id),
+      ["grok-4.6"],
+    );
+    assert.equal(textModels[0]?.title, "Grok 4.6");
+    assert.equal(parseGrokModels("!!!\n(no models)\n").length, 0);
+  });
+
+  it("reads installed Ollama names from ollama list", () => {
+    assert.deepEqual(
+      parseModelList("ollama", "NAME ID SIZE MODIFIED\nllama3.2:latest abc 2GB yesterday\n").map((model) => model.id),
+      ["llama3.2:latest"],
+    );
+  });
+
+  it("selects a default only when the account list contains it", () => {
+    const models = [
+      { id: "llama3.2", title: "llama3.2" },
+      { id: "qwen3", title: "qwen3", default: true },
+    ];
+    assert.equal(selectAccountModel(models, "missing-model", "llama3.2"), "llama3.2");
+    assert.equal(selectAccountModel(models, "missing-model"), "qwen3");
+    assert.equal(selectAccountModel(models, "llama3.2"), "llama3.2");
+    assert.equal(selectAccountModel([], "claude-opus-5-5"), "");
+  });
+
+  it("says an empty or failed list is not replaced with a built-in catalog", () => {
+    assert.match(emptyModelListMessage("openai"), /`codex debug models` returned no models/);
+    assert.match(emptyModelListMessage("xai"), /`grok models` returned no models/);
+    assert.match(emptyModelListMessage("ollama"), /`ollama list` returned no models/);
+    assert.match(emptyModelListMessage("openai"), /no built-in model list is substituted/);
+    assert.equal(emptyModelListMessage("anthropic"), CLAUDE_MODELS_UNAVAILABLE);
   });
 });
 
 describe("ollama cli text", () => {
-  it("parses ollama ls and skips the header", () => {
+  it("parses ollama list and skips the header", () => {
     const names = parseOllamaList(
       "NAME ID SIZE MODIFIED\nllama3.2:latest abc 2GB yesterday\n\ngpt-oss:20b def 10GB today\n",
     );

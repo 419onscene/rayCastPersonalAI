@@ -42,7 +42,7 @@ Each command is declared separately so you can bind them independently:
 | Ask Claude             | Same window, locked to Claude. Calls `claude`.                                                            |
 | Ask ChatGPT            | Locked to ChatGPT. Calls `codex`, the Codex CLI.                                                          |
 | Ask Grok               | Locked to Grok. Calls `grok`.                                                                             |
-| Ask Ollama             | Locked to Ollama. Lists models with `ollama ls`.                                                          |
+| Ask Ollama             | Locked to Ollama. Lists installed models with `ollama list`.                                              |
 | Ask Apple Intelligence | Locked to your Shortcut. Calls `shortcuts`.                                                               |
 | Open in Claude         | Opens the Claude desktop app with the prompt filled in.                                                   |
 | Open in ChatGPT        | Opens the ChatGPT desktop app and pastes the prompt into a new chat.                                      |
@@ -83,9 +83,8 @@ Open **Raycast Settings → Extensions → Personal AI**.
 | Preference                  | Use                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------------- |
 | Default Provider            | Used by **Ask** until you change the dropdown in the window.                             |
-| Default Model               | Model id for the default provider. Leave blank to use that provider's recommended model. |
+| Default Model               | Model id to select when that provider's account list includes it. It does not add a model the CLI did not return. Leave blank to use the CLI's default, or the first model returned. |
 | Default Thinking            | A level id, such as `medium`. Applied only when the selected model offers it.            |
-| Custom Model                | Extra model id added to the model dropdown for the provider you select.                  |
 | Ollama Host                 | Optional `OLLAMA_HOST` for the `ollama` command. Leave blank for the CLI default.        |
 | Apple Intelligence Shortcut | Shortcut name. Defaults to `Ask Apple Intelligence`.                                     |
 | Claude CLI Path             | Optional full path to `claude`.                                                          |
@@ -102,11 +101,29 @@ Run **Manage Saved Prompts** to create, edit, or delete templates. They are stor
 
 In any Ask or desktop command, choose a saved prompt in the dropdown. The text you type in the window is appended after the template, separated by a blank line. You can send a template alone, typed text alone, or both. An empty form is rejected.
 
+## Account models
+
+The model dropdown shows only the models the signed-in CLI reports. There is no built-in catalog and no custom-model preference.
+
+| Provider           | Command that lists models                                                                                                                          | What the dropdown shows                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Claude             | None. The [CLI reference](https://code.claude.com/docs/en/cli-reference) has no non-interactive list. The account picker is the interactive `/model` command ([Models, usage, and limits](https://support.claude.com/en/articles/14552983-models-usage-and-limits-in-claude-code)). | The dropdown stays hidden. The form and the reply view say Claude Code cannot list the models for this login.               |
+| ChatGPT            | `codex debug models` ([CLI reference](https://developers.openai.com/codex/cli/reference))                                                          | Selectable models in the JSON catalog that command prints for the signed-in account.                                         |
+| Grok               | `grok models` ([CLI reference](https://docs.x.ai/build/cli/reference))                                                                             | Models that command prints.                                                                                                  |
+| Ollama             | `ollama list`                                                                                                                                      | Models installed on the local server, which is the set that can run.                                                         |
+| Apple Intelligence | None                                                                                                                                               | No model menu. The shortcut runs as you built it.                                                                            |
+
+`codex debug models` refreshes the catalog Codex sees for the signed-in ChatGPT account. This extension does not pass `--bundled`, which prints only the catalog shipped inside the binary.
+
+If the list command fails, or it returns no models, the dropdown stays hidden. The form explains what happened. Submitting the prompt opens the reply view with that same explanation and does not start a model. A missing binary uses the usual missing-CLI message. While the list command is still running, the form says it is checking and does not treat the empty dropdown as a failure. Nothing in those cases is filled from a built-in model list.
+
 ## Thinking
 
-The thinking dropdown lists only the levels the selected model offers. Changing the model changes the dropdown. There is no Off level, and a level the model does not offer is not sent as a lower one.
+The thinking dropdown lists only the levels for the selected model, and it changes when the model changes. There is no Off level, and a level the model does not offer is not sent as a lower one.
 
-If the model has no listed levels, the dropdown is hidden and the command does not pass a thinking flag. The CLI then uses its own default.
+When `codex debug models` or `grok models` includes effort levels for that model, the dropdown uses those names. `off` and `none` are dropped. An empty effort list is still a report, so the documented table below is not used. When the command does not include effort levels, the tables below apply only to a model id that the account list actually returned.
+
+If the selected model has no levels, the dropdown is hidden and the command does not pass a thinking flag. The CLI then uses its own default.
 
 Claude levels come from [Claude Code model config](https://code.claude.com/docs/en/model-config). `ultracode` is a Claude Code setting, not a model level, so it is not in the dropdown.
 
@@ -139,13 +156,7 @@ Ollama levels come from `ollama show`. When that output includes a `thinking.val
 
 Apple Intelligence has no thinking dropdown.
 
-Curated models:
-
-- Claude: `claude-opus-5-5` (recommended), `claude-fable-5-1`, `claude-sonnet-5-5`, `claude-haiku-5-5`
-- ChatGPT: `gpt-6-astra` (recommended), `gpt-6.1-sol`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`
-- Grok: `grok-4.7` (recommended), `grok-4.6`, `grok-4.5`, `grok-4.3`
-
-`gpt-5.4` is not listed. Codex with ChatGPT sign-in retired it. Put any other id in **Custom Model** or **Default Model**. A custom id gets a thinking dropdown only when the docs above name that id.
+Those tables are a fallback for effort, not a model menu. A model appears in the dropdown only when the account list returned it.
 
 ## Desktop apps
 
@@ -179,6 +190,7 @@ The binary is the preference path, or `/usr/bin/shortcuts`. If the command is mi
 
 - The CLI binary is not in the preference path or the common install locations.
 - The CLI is not signed in, or it exits with an error.
+- The model list command failed, returned no models, or, for Claude, does not exist. The reply view explains that, and no built-in catalog is used.
 - Ollama has no installed models, or `ollama show` did not report thinking levels.
 - Shortcut missing, or a shortcut that returns nothing.
 - Claude or ChatGPT desktop app not installed.

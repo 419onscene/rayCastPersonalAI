@@ -6,7 +6,6 @@ export interface ExtensionPreferences {
   defaultProvider: ProviderId;
   defaultModel: string;
   defaultThinking: string;
-  customModelId: string;
   ollamaHost: string;
   appleShortcutName: string;
   claudeCliPath: string;

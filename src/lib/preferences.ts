@@ -7,7 +7,6 @@ export function readPreferences(): ExtensionPreferences {
     defaultProvider: isProviderId(values.defaultProvider) ? values.defaultProvider : "anthropic",
     defaultModel: values.defaultModel?.trim() ?? "",
     defaultThinking: values.defaultThinking?.trim() ?? "",
-    customModelId: values.customModelId?.trim() ?? "",
     ollamaHost: values.ollamaHost?.trim() ?? "",
     appleShortcutName: values.appleShortcutName?.trim() || "Ask Apple Intelligence",
     claudeCliPath: values.claudeCliPath?.trim() ?? "",
