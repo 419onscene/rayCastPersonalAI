@@ -242,15 +242,21 @@ describe("cli commands", () => {
       prompt: "Hello",
     });
     assert.equal(command.command, "grok");
-    assert.equal(command.args[0], "-p");
+    assert.equal(command.args[0], "--prompt-file");
     assert.equal(command.args.includes("--effort"), false);
+    assert.equal(command.args.includes("-p"), false);
+    assert.equal(command.args[command.args.indexOf("--output-format") + 1], "plain");
+    assert.ok(command.args.includes("--verbatim"));
+    assert.equal(command.args[command.args.indexOf("--permission-mode") + 1], "dontAsk");
     const high = buildProviderCommand({
       provider: "xai",
       model: "grok-4.5",
       thinking: "high",
-      prompt: "Hello",
+      prompt: "/tmp/prompt.txt",
     });
+    assert.equal(high.args[high.args.indexOf("--model") + 1], "grok-4.5");
     assert.equal(high.args[high.args.indexOf("--effort") + 1], "high");
+    assert.equal(high.args[high.args.indexOf("--prompt-file") + 1], "/tmp/prompt.txt");
   });
 
   it("calls ollama run with a reported level and does not rename extra high to max", () => {
@@ -583,12 +589,23 @@ describe("account model lists", () => {
     assert.deepEqual(jsonModels[0]?.efforts?.values, ["low", "high"]);
     assert.equal(jsonModels[1]?.efforts, undefined);
 
-    const textModels = parseGrokModels("MODEL\ngrok-4.6  Grok 4.6\n(not a model)\n");
+    const textModels = parseGrokModels(
+      [
+        "You are logged in with grok.com.",
+        "Default model: grok-4.7",
+        "  * grok-4.7 (default)",
+        "  - grok-4.7-build-fast",
+        "  - grok-4.6",
+      ].join("\n"),
+    );
     assert.deepEqual(
       textModels.map((model) => model.id),
-      ["grok-4.6"],
+      ["grok-4.7", "grok-4.7-build-fast", "grok-4.6"],
     );
-    assert.equal(textModels[0]?.title, "Grok 4.6");
+    assert.equal(textModels[0]?.default, true);
+    assert.deepEqual(textModels[0]?.efforts?.values, ["low", "medium", "high", "xhigh"]);
+    assert.equal(textModels[0]?.title, "grok-4.7");
+    assert.equal(parseGrokModels("Auth: OAuth\n\ngrok-4.7\n")[0]?.id, "grok-4.7");
     assert.equal(parseGrokModels("!!!\n(no models)\n").length, 0);
   });
 

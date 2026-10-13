@@ -48,9 +48,10 @@ function codexArgs(model: string, prompt: string, effort?: string): string[] {
   return args;
 }
 
-function grokArgs(model: string, prompt: string, effort?: string): string[] {
-  const args = ["-p", prompt, "--model", model, "--output-format", "streaming-json", "--max-turns", "1"];
+function grokArgs(model: string, promptFile: string, effort?: string): string[] {
+  const args = ["--prompt-file", promptFile, "--model", model];
   if (effort) args.push("--effort", effort);
+  args.push("--output-format", "plain", "--verbatim", "--permission-mode", "dontAsk");
   return args;
 }
 

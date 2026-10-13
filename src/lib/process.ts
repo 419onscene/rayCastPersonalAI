@@ -54,6 +54,7 @@ export function streamCommand(
     signal?: AbortSignal;
     cwd?: string;
     env?: NodeJS.ProcessEnv;
+    input?: string;
     onStdout: (chunk: string) => void;
   },
 ): Promise<CommandResult> {
@@ -95,7 +96,7 @@ export function streamCommand(
       const error = new Error(clip(stderr || stdout) || `${command} exited with code ${code ?? "unknown"}`);
       reject(error);
     });
-    child.stdin.end();
+    child.stdin.end(options.input ?? "");
   });
 }
 

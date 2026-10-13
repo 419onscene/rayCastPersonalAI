@@ -136,24 +136,61 @@ export function parseGrokModels(stdout: string): AccountModel[] {
   return models;
 }
 
+const GROK_LEVELS = ["low", "medium", "high", "xhigh"];
+
 function parseGrokText(stdout: string): AccountModel[] {
-  const models: AccountModel[] = [];
-  const seen = new Set<string>();
-  for (const line of stdout.split(/\r?\n/)) {
-    const trimmed = line.trim().replace(/^[-*]\s+/, "");
-    if (!trimmed) continue;
-    const [id, ...rest] = trimmed.split(/\s+/);
-    if (!id || /^(model|models|id|name|available)$/i.test(id)) continue;
-    if (!/^[A-Za-z0-9_.:@/-]+$/.test(id)) continue;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const title = rest
-      .join(" ")
-      .replace(/^[—–-]\s*/, "")
-      .trim();
-    models.push({ id, title: title || id });
+  const grouped = new Map<string, { label?: string; efforts: string[]; bare: boolean; fallback: boolean }>();
+  const order: string[] = [];
+  const cleaned = stdout.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+  for (const rawLine of cleaned.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/^[*\-•]\s+/, "");
+    if (!line || /^(available models|tip:|no models|you are logged|default model)/i.test(line)) continue;
+    const match = line.match(/^([A-Za-z0-9][A-Za-z0-9._:@/-]*)(?:\s+-\s+(.+?))?(?:\s+\([^)]*\))?\s*$/);
+    if (!match?.[1]) continue;
+    const label = match[2]?.trim();
+    const { stem, effort } = splitGrokEffort(match[1]);
+    let bucket = grouped.get(stem);
+    if (!bucket) {
+      bucket = { efforts: [], bare: false, fallback: false };
+      grouped.set(stem, bucket);
+      order.push(stem);
+    }
+    if (label) bucket.label = label;
+    if (effort) bucket.efforts.push(effort);
+    else bucket.bare = true;
+    if (/\(default\)/i.test(rawLine)) bucket.fallback = true;
   }
-  return models;
+  return order.flatMap((stem) => {
+    const bucket = grouped.get(stem);
+    if (!bucket) return [];
+    const explicit = GROK_LEVELS.filter((level) => bucket.efforts.includes(level));
+    const withHigh =
+      bucket.bare && explicit.length > 0 && !explicit.includes("high") ? ["high", ...explicit] : explicit;
+    const values = withHigh.length > 0 ? GROK_LEVELS.filter((level) => withHigh.includes(level)) : GROK_LEVELS;
+    return [
+      {
+        id: stem,
+        title: bucket.label || stem,
+        ...(bucket.fallback ? { default: true } : {}),
+        efforts: {
+          values,
+          defaultValue: values.includes("high") ? "high" : values[0],
+          reported: true,
+        },
+      },
+    ];
+  });
+}
+
+function splitGrokEffort(modelId: string): { stem: string; effort?: string } {
+  const levels = [...GROK_LEVELS].sort((left, right) => right.length - left.length);
+  for (const level of levels) {
+    const suffix = `-${level}`;
+    if (modelId.endsWith(suffix) && modelId.length > suffix.length) {
+      return { stem: modelId.slice(0, -suffix.length), effort: level };
+    }
+  }
+  return { stem: modelId };
 }
 
 function modelRows(json: unknown): Record<string, unknown>[] {

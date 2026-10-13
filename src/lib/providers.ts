@@ -1,4 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { join } from "path";
 import { runAppleShortcut } from "./apple";
 import { commandEnv, resolveCliBinary } from "./binaries";
 import { ensureSignedIn, isAuthFailure, loginRequiredMessage } from "./cli-login";
@@ -9,8 +11,10 @@ import {
   deltasFromCodexLine,
   deltasFromGrokLine,
   splitLines,
+  stripAnsi,
 } from "./cli-output";
 import { commandErrorText, streamCommand } from "./process";
+import { subscriptionAuthorized } from "./subscription-login";
 import { type CliName, CLI_COMMAND, type ProviderId, type ReplyDelta } from "./types";
 
 export interface GenerateInput {
@@ -59,23 +63,46 @@ export async function generateReply(
     throw new Error("Pick a model from the account list.");
   }
 
-  const command = buildProviderCommand({
-    provider: input.provider,
-    model: input.model,
-    thinking: input.thinking,
-    prompt: input.prompt,
-    thinkingLevels: input.thinkingLevels,
-  });
-  const binary = resolveOrThrow(command.command, preferencePath(input, command.command), input.home);
-  const signedIn = await ensureSignedIn(binary, command.command, handlers.signal, input.home);
-  if (signedIn) throw new Error(signedIn);
-  const env = commandEnv(
-    binary,
-    input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : undefined,
-    input.home,
-  );
+  if (input.provider === "xai" && input.home && !subscriptionAuthorized("xai", input.home)) {
+    throw new Error(loginRequiredMessage("grok"));
+  }
 
+  let promptFile: string | undefined;
+  let binary = "";
+  let commandName: CliName = CLI_COMMAND[input.provider];
   try {
+    if (input.provider === "xai") promptFile = writeGrokPrompt(input.prompt);
+    const command = buildProviderCommand({
+      provider: input.provider,
+      model: input.model,
+      thinking: input.thinking,
+      prompt: promptFile ?? input.prompt,
+      thinkingLevels: input.thinkingLevels,
+    });
+    binary = resolveOrThrow(command.command, preferencePath(input, command.command), input.home);
+    commandName = command.command;
+    const signedIn = await ensureSignedIn(binary, command.command, handlers.signal, input.home);
+    if (signedIn) throw new Error(signedIn);
+    const env = commandEnv(
+      binary,
+      input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : undefined,
+      input.home,
+    );
+
+    if (input.provider === "xai" && promptFile) {
+      await streamCommand(binary, command.args, {
+        signal: handlers.signal,
+        cwd: tmpdir(),
+        env,
+        input: input.prompt,
+        onStdout: (chunk) => {
+          const text = stripAnsi(chunk);
+          if (text) handlers.onDelta({ kind: "text", text });
+        },
+      });
+      return;
+    }
+
     if (input.provider === "ollama") {
       const parser = createOllamaPlainParser(handlers.onDelta);
       await streamCommand(binary, command.args, {
@@ -110,13 +137,22 @@ export async function generateReply(
     if (handlers.signal.aborted) throw error;
     const detail = commandErrorText(error);
     if (isAuthFailure(detail)) {
-      throw new Error(loginRequiredMessage(command.command));
+      throw new Error(loginRequiredMessage(commandName));
     }
     if (/enoent/i.test(detail)) {
       throw new Error(`\`${CLI_COMMAND[input.provider]}\` couldn't be started at ${binary}.`);
     }
     throw new Error(detail || `${CLI_COMMAND[input.provider]} failed.`);
+  } finally {
+    if (promptFile) rmSync(join(promptFile, ".."), { recursive: true, force: true });
   }
+}
+
+function writeGrokPrompt(prompt: string): string {
+  const directory = mkdtempSync(join(tmpdir(), "personal-ai-grok-"));
+  const path = join(directory, "prompt.txt");
+  writeFileSync(path, prompt, { encoding: "utf8", mode: 0o600 });
+  return path;
 }
 
 function emit(deltas: ReplyDelta[], onDelta: (delta: ReplyDelta) => void): void {

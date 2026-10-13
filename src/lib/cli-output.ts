@@ -45,6 +45,10 @@ export function deltasFromCodexLine(line: string): ReplyDelta[] {
   return [];
 }
 
+export function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+}
+
 export function deltasFromGrokLine(line: string): ReplyDelta[] {
   const json = parseJson(line);
   if (!json) {
