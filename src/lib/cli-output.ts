@@ -52,16 +52,39 @@ export function stripAnsi(text: string): string {
 export function deltasFromGrokLine(line: string): ReplyDelta[] {
   const json = parseJson(line);
   if (!json) {
-    return line.trim().startsWith("{") ? [] : [{ kind: "text", text: line }];
+    const plain = line.trim();
+    if (!plain || plain.startsWith("{")) return [];
+    if (/permission|approve|waiting for (you|input|approval)/i.test(plain)) {
+      return [{ kind: "status", text: `Grok is waiting: ${plain}` }];
+    }
+    return [{ kind: "text", text: line.endsWith("\n") ? line : `${line}\n` }];
   }
-  if (json.type === "error")
-    throw new Error(readString(json.message) || readString(json.data) || "Grok returned an error.");
+  if (json.type === "error") {
+    const message = readString(json.message) || readString(json.data) || "Grok returned an error.";
+    if (/permission|approve/i.test(message))
+      return [{ kind: "status", text: `Grok is waiting for permission. ${message}` }];
+    throw new Error(message);
+  }
+  if (json.type === "tool_call" || json.type === "tool_call_update") return [grokToolStatus(json)];
   if (json.type === "text" && typeof json.data === "string" && json.data) return [{ kind: "text", text: json.data }];
   if (json.type === "thought" && typeof json.data === "string" && json.data) {
     return [{ kind: "thinking", text: json.data }];
   }
+  if (json.type === "plan") return [{ kind: "status", text: "Grok is updating its plan." }];
   if (typeof json.text === "string" && json.text && json.type !== "end") return [{ kind: "text", text: json.text }];
   return [];
+}
+
+function grokToolStatus(json: Record<string, unknown>): ReplyDelta {
+  const name = readString(json.toolName) || readString(json.title) || "a tool";
+  const status = readString(json.status).toLowerCase();
+  const detail = `${name} ${readString(json.kind)} ${JSON.stringify(json.rawInput ?? "")}`;
+  if (/permission|approve|awaiting/i.test(detail) || status === "pending" || status === "requires_approval") {
+    return { kind: "status", text: `Grok is waiting for permission to use ${name}.` };
+  }
+  if (status === "failed" || status === "error") return { kind: "status", text: `Grok's ${name} call failed.` };
+  if (status === "completed") return { kind: "status", text: `Grok finished ${name}.` };
+  return { kind: "status", text: `Grok is using ${name}.` };
 }
 
 const OLLAMA_THINKING_OPEN = "Thinking...\n";

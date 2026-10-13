@@ -4,6 +4,8 @@ import { generateReply, type GenerateInput } from "./lib/providers";
 import { renderReply } from "./lib/render-reply";
 import { PROVIDER_LABEL } from "./lib/types";
 
+const QUIET_AFTER_MS = 2500;
+
 export function Answer(props: GenerateInput) {
   const [thinkingText, setThinkingText] = useState("");
   const [answer, setAnswer] = useState("");
@@ -11,8 +13,11 @@ export function Answer(props: GenerateInput) {
   const [error, setError] = useState<string | undefined>();
   const [pending, setPending] = useState(true);
   const [stopped, setStopped] = useState(false);
+  const [status, setStatus] = useState("");
+  const [quiet, setQuiet] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const lastActivityRef = useRef(Date.now());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -27,7 +32,10 @@ export function Answer(props: GenerateInput) {
     setError(undefined);
     setNote(undefined);
     setStopped(false);
+    setStatus("");
+    setQuiet(false);
     setPending(true);
+    lastActivityRef.current = Date.now();
 
     const flush = () => {
       if (!active) return;
@@ -48,6 +56,12 @@ export function Answer(props: GenerateInput) {
         if (active) setNote(next);
       },
       onDelta: (delta) => {
+        lastActivityRef.current = Date.now();
+        setQuiet(false);
+        if (delta.kind === "status") {
+          setStatus(delta.text);
+          return;
+        }
         if (delta.kind === "thinking") thinkingBuffer += delta.text;
         else answerBuffer += delta.text;
         schedule();
@@ -72,6 +86,14 @@ export function Answer(props: GenerateInput) {
     };
   }, [attempt, props]);
 
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setInterval(() => {
+      setQuiet(Date.now() - lastActivityRef.current > QUIET_AFTER_MS);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [pending, attempt]);
+
   const markdown = renderReply({
     thinking: thinkingText,
     answer,
@@ -82,15 +104,26 @@ export function Answer(props: GenerateInput) {
     error,
     stopped: stopped && !error,
     pending,
+    status,
+    quiet,
   });
   const copyText = answer || thinkingText;
   const showPreferences = Boolean(error && /preferences|shortcut|isn't available|couldn't be started/i.test(error));
+  const activity = activityText(pending, status, quiet, Boolean(answer || thinkingText));
 
   return (
     <Detail
       isLoading={pending}
       markdown={markdown}
       navigationTitle="Reply"
+      metadata={
+        <Detail.Metadata>
+          <Detail.Metadata.Label title="Provider" text={PROVIDER_LABEL[props.provider]} />
+          <Detail.Metadata.Label title="Model" text={props.model || "Shortcut"} />
+          <Detail.Metadata.Label title="Thinking" text={props.thinkingLabel} />
+          <Detail.Metadata.Label title={pending ? "Activity" : "Status"} text={activity} />
+        </Detail.Metadata>
+      }
       actions={
         <ActionPanel>
           {pending ? (
@@ -114,4 +147,12 @@ export function Answer(props: GenerateInput) {
       }
     />
   );
+}
+
+function activityText(pending: boolean, status: string, quiet: boolean, started: boolean): string {
+  if (pending && status) return status;
+  if (pending && quiet && started) return "Waiting for the process to continue…";
+  if (pending && started) return "Still writing…";
+  if (pending) return "Waiting for a reply…";
+  return "Finished";
 }

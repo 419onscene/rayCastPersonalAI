@@ -23,7 +23,7 @@ export interface SavedPrompt {
 }
 
 export interface ReplyDelta {
-  kind: "text" | "thinking";
+  kind: "text" | "thinking" | "status";
   text: string;
 }
 

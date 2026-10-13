@@ -51,7 +51,7 @@ function codexArgs(model: string, prompt: string, effort?: string): string[] {
 function grokArgs(model: string, promptFile: string, effort?: string): string[] {
   const args = ["--prompt-file", promptFile, "--model", model];
   if (effort) args.push("--effort", effort);
-  args.push("--output-format", "plain", "--verbatim", "--permission-mode", "dontAsk");
+  args.push("--output-format", "streaming-json", "--verbatim", "--permission-mode", "dontAsk");
   return args;
 }
 

@@ -90,16 +90,25 @@ export async function generateReply(
     );
 
     if (input.provider === "xai" && promptFile) {
+      let rest = "";
+      const pushGrok = (chunk: string) => {
+        const parsed = splitLines(rest + chunk);
+        rest = parsed.rest;
+        for (const line of parsed.lines) emit(deltasFromGrokLine(stripAnsi(line)), handlers.onDelta);
+      };
       await streamCommand(binary, command.args, {
         signal: handlers.signal,
         cwd: tmpdir(),
         env,
-        input: input.prompt,
-        onStdout: (chunk) => {
-          const text = stripAnsi(chunk);
-          if (text) handlers.onDelta({ kind: "text", text });
+        onStdout: pushGrok,
+        onStderr: (chunk) => {
+          const text = stripAnsi(chunk).replace(/\s+/g, " ").trim();
+          if (/permission|approve|waiting for (you|input|approval)/i.test(text)) {
+            handlers.onDelta({ kind: "status", text: `Grok is waiting: ${text.slice(0, 240)}` });
+          }
         },
       });
+      if (rest.trim()) emit(deltasFromGrokLine(stripAnsi(rest)), handlers.onDelta);
       return;
     }
 

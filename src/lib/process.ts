@@ -56,6 +56,7 @@ export function streamCommand(
     env?: NodeJS.ProcessEnv;
     input?: string;
     onStdout: (chunk: string) => void;
+    onStderr?: (chunk: string) => void;
   },
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
@@ -76,6 +77,7 @@ export function streamCommand(
     });
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
+      options.onStderr?.(chunk);
     });
     child.on("error", (error) => {
       if (settled) return;

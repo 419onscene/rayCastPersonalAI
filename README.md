@@ -53,13 +53,13 @@ Each command is declared separately so you can bind them independently:
 
 Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with the Mac account name saved for that provider in **Add AI**. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
 
-| Provider           | Binary      | What it runs                                                                                                             |
-| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Claude             | `claude`    | `claude -p` with `--model`, `--output-format stream-json`, and `--effort` when the model lists effort.                   |
-| ChatGPT            | `codex`     | `codex exec` with `-m`, `--json`, a read-only sandbox, and `model_reasoning_effort` when the model lists it.             |
-| Grok               | `grok`      | `grok --prompt-file` with `--model`, `--effort`, `--output-format plain`, `--verbatim`, and `--permission-mode dontAsk`. |
-| Ollama             | `ollama`    | `ollama run` with `--think=<level>` only when that model reported the level.                                             |
-| Apple Intelligence | `shortcuts` | `shortcuts run` with an input file and an output file.                                                                   |
+| Provider           | Binary      | What it runs                                                                                                                      |
+| ------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Claude             | `claude`    | `claude -p` with `--model`, `--output-format stream-json`, and `--effort` when the model lists effort.                            |
+| ChatGPT            | `codex`     | `codex exec` with `-m`, `--json`, a read-only sandbox, and `model_reasoning_effort` when the model lists it.                      |
+| Grok               | `grok`      | `grok --prompt-file` with `--model`, `--effort`, `--output-format streaming-json`, `--verbatim`, and `--permission-mode dontAsk`. |
+| Ollama             | `ollama`    | `ollama run` with `--think=<level>` only when that model reported the level.                                                      |
+| Apple Intelligence | `shortcuts` | `shortcuts run` with an input file and an output file.                                                                            |
 
 ChatGPT uses the Codex CLI. That is the official local CLI you sign in to with ChatGPT (`codex exec`, documented at [Non-interactive mode](https://developers.openai.com/codex/noninteractive) and [Models](https://learn.chatgpt.com/docs/models)). This extension does not call a separate ChatGPT HTTP API.
 

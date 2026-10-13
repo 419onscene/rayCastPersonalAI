@@ -245,7 +245,7 @@ describe("cli commands", () => {
     assert.equal(command.args[0], "--prompt-file");
     assert.equal(command.args.includes("--effort"), false);
     assert.equal(command.args.includes("-p"), false);
-    assert.equal(command.args[command.args.indexOf("--output-format") + 1], "plain");
+    assert.equal(command.args[command.args.indexOf("--output-format") + 1], "streaming-json");
     assert.ok(command.args.includes("--verbatim"));
     assert.equal(command.args[command.args.indexOf("--permission-mode") + 1], "dontAsk");
     const high = buildProviderCommand({
@@ -482,6 +482,9 @@ describe("cli output", () => {
     ]);
     assert.deepEqual(deltasFromGrokLine('{"type":"thought","data":"Step"}'), [{ kind: "thinking", text: "Step" }]);
     assert.deepEqual(deltasFromGrokLine('{"type":"text","data":"Answer"}'), [{ kind: "text", text: "Answer" }]);
+    assert.deepEqual(deltasFromGrokLine('{"type":"tool_call","toolName":"web_search","status":"in_progress"}'), [
+      { kind: "status", text: "Grok is using web_search." },
+    ]);
   });
 
   it("splits an Ollama thinking trace from the answer", () => {
@@ -699,7 +702,14 @@ describe("desktop handoff", () => {
 
 describe("reply view", () => {
   it("shows loading, the answer, and an empty result", () => {
-    assert.match(renderReply(view({ pending: true })), /Sending your prompt/);
+    const waiting = renderReply(view({ pending: true }));
+    assert.match(waiting, /Waiting for a reply/);
+    assert.ok(waiting.indexOf("ChatGPT") < waiting.indexOf("Waiting for a reply"));
+    assert.doesNotMatch(waiting, /^---/m);
+    const partial = renderReply(view({ pending: true, answer: "One line", status: "Grok is using web_search." }));
+    assert.match(partial, /One line/);
+    assert.match(partial, /web_search/);
+    assert.ok(partial.indexOf("ChatGPT") < partial.indexOf("One line"));
     assert.match(renderReply(view({ pending: false, answer: "Done" })), /Done/);
     assert.match(renderReply(view({ pending: false })), /empty reply/);
   });
