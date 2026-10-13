@@ -109,21 +109,12 @@ export function Answer(props: GenerateInput) {
   });
   const copyText = answer || thinkingText;
   const showPreferences = Boolean(error && /preferences|shortcut|isn't available|couldn't be started/i.test(error));
-  const activity = activityText(pending, status, quiet, Boolean(answer || thinkingText));
 
   return (
     <Detail
       isLoading={pending}
       markdown={markdown}
       navigationTitle="Reply"
-      metadata={
-        <Detail.Metadata>
-          <Detail.Metadata.Label title="Provider" text={PROVIDER_LABEL[props.provider]} />
-          <Detail.Metadata.Label title="Model" text={props.model || "Shortcut"} />
-          <Detail.Metadata.Label title="Thinking" text={props.thinkingLabel} />
-          <Detail.Metadata.Label title={pending ? "Activity" : "Status"} text={activity} />
-        </Detail.Metadata>
-      }
       actions={
         <ActionPanel>
           {pending ? (
@@ -147,12 +138,4 @@ export function Answer(props: GenerateInput) {
       }
     />
   );
-}
-
-function activityText(pending: boolean, status: string, quiet: boolean, started: boolean): string {
-  if (pending && status) return status;
-  if (pending && quiet && started) return "Waiting for the process to continue…";
-  if (pending && started) return "Still writing…";
-  if (pending) return "Waiting for a reply…";
-  return "Finished";
 }
