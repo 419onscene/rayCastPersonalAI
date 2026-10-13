@@ -38,12 +38,12 @@ Each command is declared separately so you can bind them independently:
 
 | Command                | What it does                                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| Ask                    | Prompt window. Provider, model, and thinking start from your preferences and can be changed for that run. |
-| Ask Claude             | Same window, locked to Claude. Calls `claude`.                                                            |
-| Ask ChatGPT            | Locked to ChatGPT. Calls `codex`, the Codex CLI.                                                          |
-| Ask Grok               | Locked to Grok. Calls `grok`.                                                                             |
-| Ask Ollama             | Locked to Ollama. Lists installed models with `ollama list`.                                              |
-| Ask Apple Intelligence | Locked to your Shortcut. Calls `shortcuts`.                                                               |
+| Ask                    | Prompt window. The provider menu lists signed-in services. Model and thinking sit on one row.             |
+| Ask Claude             | Same window, starting on Claude when that account is signed in.                                           |
+| Ask ChatGPT            | Same window, starting on ChatGPT when that account is signed in.                                          |
+| Ask Grok               | Same window, starting on Grok when that account is signed in.                                             |
+| Ask Ollama             | Same window, starting on Ollama. Lists installed models with `ollama list`.                               |
+| Ask Apple Intelligence | Same window, starting on your Shortcut.                                                                   |
 | Open in Claude         | Opens the Claude desktop app with the prompt filled in.                                                   |
 | Open in ChatGPT        | Opens the ChatGPT desktop app and pastes the prompt into a new chat.                                      |
 | Add AI                 | Sign-in screen for Claude, ChatGPT, and Grok. Settings cannot start this login.                           |
@@ -110,7 +110,7 @@ There are no API-key preferences. **Add AI** is where Claude, ChatGPT, and Grok 
 
 Run **Manage Saved Prompts** to create, edit, or delete templates. They are stored in Raycast LocalStorage on this Mac.
 
-In any Ask or desktop command, choose a saved prompt in the dropdown. The text you type in the window is appended after the template, separated by a blank line. You can send a template alone, typed text alone, or both. An empty form is rejected.
+In any Ask command, choose a saved prompt from Actions. The text you type is appended after the template, separated by a blank line. You can send a template alone, typed text alone, or both. An empty prompt is rejected. Desktop commands still choose a saved prompt in the dropdown.
 
 ## Account models
 

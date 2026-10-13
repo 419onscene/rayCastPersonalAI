@@ -1,0 +1,30 @@
+import { type ProviderId } from "./types";
+
+export const PROMPT_HELP =
+  "Pick a saved prompt to start from it. Anything you type here is added after that template. Claude, ChatGPT, and Grok sign in from Add AI. That screen opens Terminal for the subscription CLI and keeps the grant.";
+
+export function askableProviders(input: {
+  claude: boolean;
+  chatgpt: boolean;
+  grok: boolean;
+  includeLocal?: ProviderId;
+}): ProviderId[] {
+  const ids: ProviderId[] = [];
+  if (input.claude) ids.push("anthropic");
+  if (input.chatgpt) ids.push("openai");
+  if (input.grok) ids.push("xai");
+  if ((input.includeLocal === "ollama" || input.includeLocal === "apple") && !ids.includes(input.includeLocal)) {
+    ids.push(input.includeLocal);
+  }
+  return ids;
+}
+
+export function initialProvider(
+  available: ProviderId[],
+  launched: ProviderId | undefined,
+  preferred: ProviderId,
+): ProviderId {
+  if (launched && available.includes(launched)) return launched;
+  if (available.includes(preferred)) return preferred;
+  return available[0] ?? preferred;
+}

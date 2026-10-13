@@ -50,7 +50,28 @@ import {
   terminalTarget,
 } from "./subscription-login";
 import { offeredLevel, selectThinking, thinkingCatalog } from "./thinking";
+import { askableProviders, initialProvider } from "./ask-providers";
 import { type ProviderId, type ReplyDelta } from "./types";
+
+describe("ask providers", () => {
+  it("lists only the subscription services that are signed in", () => {
+    assert.deepEqual(askableProviders({ claude: false, chatgpt: true, grok: true }), ["openai", "xai"]);
+  });
+
+  it("keeps Ollama available on Ask Ollama and leaves it off Ask Grok", () => {
+    assert.deepEqual(askableProviders({ claude: true, chatgpt: false, grok: false, includeLocal: "ollama" }), [
+      "anthropic",
+      "ollama",
+    ]);
+    assert.deepEqual(askableProviders({ claude: false, chatgpt: false, grok: true, includeLocal: "xai" }), ["xai"]);
+  });
+
+  it("starts on the launched service when it is signed in, otherwise the first signed-in service", () => {
+    assert.equal(initialProvider(["anthropic", "xai"], "xai", "anthropic"), "xai");
+    assert.equal(initialProvider(["anthropic"], "xai", "ollama"), "anthropic");
+    assert.equal(initialProvider([], "xai", "anthropic"), "anthropic");
+  });
+});
 
 describe("composePrompt", () => {
   it("appends typed text to a saved template", () => {

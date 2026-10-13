@@ -3,30 +3,32 @@ import {
   ActionPanel,
   Form,
   Icon,
+  List,
   openExtensionPreferences,
   showToast,
   Toast,
   useNavigation,
 } from "@raycast/api";
 import { homedir } from "os";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Answer } from "./answer";
+import { askableProviders, initialProvider, PROMPT_HELP } from "./lib/ask-providers";
 import { resolveCliBinary } from "./lib/binaries";
-import { signInFirstMessage } from "./lib/connection-json";
 import { composePrompt } from "./lib/compose-prompt";
 import { listAccountModels, selectAccountModel, type AccountModel } from "./lib/models";
 import { readOllamaThinking, type OllamaThinking } from "./lib/ollama";
-import { cliPathFor, readPreferences } from "./lib/preferences";
+import { readPreferences } from "./lib/preferences";
 import { loadPrompts } from "./lib/prompts";
 import { selectThinking, thinkingCatalog, type ThinkingCatalog } from "./lib/thinking";
 import { isSubscriptionProvider, subscriptionAuthorized } from "./lib/subscription-login";
-import { CLI_COMMAND, isProviderId, PROVIDERS, type ProviderId, type SavedPrompt } from "./lib/types";
+import { isProviderId, PROVIDER_LABEL, type ProviderId, type SavedPrompt } from "./lib/types";
 
 export function AskCommand(props: { provider?: ProviderId }) {
   const preferences = readPreferences();
   const {
     defaultModel,
     defaultThinking,
+    defaultProvider,
     ollamaHost,
     appleShortcutName,
     claudeCliPath,
@@ -35,37 +37,38 @@ export function AskCommand(props: { provider?: ProviderId }) {
     ollamaCliPath,
     shortcutsCliPath,
   } = preferences;
-  const locked = props.provider;
-  const initialProvider = locked ?? preferences.defaultProvider;
-  const [provider, setProvider] = useState<ProviderId>(initialProvider);
+  const home = homedir();
+  const available = useMemo(
+    () =>
+      askableProviders({
+        claude: readGrant("anthropic", home),
+        chatgpt: readGrant("openai", home),
+        grok: readGrant("xai", home),
+        includeLocal: props.provider,
+      }),
+    [home, props.provider],
+  );
+  const [provider, setProvider] = useState<ProviderId>(() =>
+    initialProvider(available, props.provider, defaultProvider),
+  );
   const [thinking, setThinking] = useState(defaultThinking);
-  const [model, setModel] = useState(initialProvider === "anthropic" ? defaultModel : "");
+  const [model, setModel] = useState(props.provider === "anthropic" ? defaultModel : "");
+  const [prompt, setPrompt] = useState("");
+  const [templateId, setTemplateId] = useState("none");
   const [prompts, setPrompts] = useState<SavedPrompt[] | undefined>(undefined);
   const [promptError, setPromptError] = useState<string>();
   const [models, setModels] = useState<AccountModel[]>([]);
   const [listError, setListError] = useState<string>();
-  const [listLoading, setListLoading] = useState(initialProvider !== "apple" && initialProvider !== "anthropic");
+  const [listLoading, setListLoading] = useState(provider !== "apple" && provider !== "anthropic");
   const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
   const [thinkingLoading, setThinkingLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>();
-  const [grantReady, setGrantReady] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
   const { push } = useNavigation();
-  const home = homedir();
+  const signedIn = !isSubscriptionProvider(provider) || available.includes(provider);
 
   useEffect(() => {
-    if (!isSubscriptionProvider(provider)) {
-      setSignedIn(false);
-      setGrantReady(true);
-      return;
-    }
-    try {
-      setSignedIn(subscriptionAuthorized(provider, home));
-    } catch {
-      setSignedIn(false);
-    }
-    setGrantReady(true);
-  }, [provider, home]);
+    if (available.length > 0 && !available.includes(provider)) setProvider(available[0]);
+  }, [available, provider]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,9 +87,8 @@ export function AskCommand(props: { provider?: ProviderId }) {
   }, []);
 
   useEffect(() => {
-    const needsSignIn = isSubscriptionProvider(provider);
-    if (!grantReady) {
-      if (needsSignIn || provider === "ollama") setListLoading(true);
+    if (available.length === 0) {
+      setListLoading(false);
       return;
     }
     if (provider === "apple") {
@@ -96,9 +98,9 @@ export function AskCommand(props: { provider?: ProviderId }) {
       setStatusMessage(undefined);
       return;
     }
-    if (needsSignIn && !signedIn) {
+    if (isSubscriptionProvider(provider) && !signedIn) {
       setModels([]);
-      setListError(signInFirstMessage(provider));
+      setListError(undefined);
       setListLoading(false);
       setStatusMessage(undefined);
       return;
@@ -153,8 +155,8 @@ export function AskCommand(props: { provider?: ProviderId }) {
     grokCliPath,
     ollamaCliPath,
     home,
-    grantReady,
     signedIn,
+    available.length,
   ]);
 
   useEffect(() => {
@@ -208,15 +210,14 @@ export function AskCommand(props: { provider?: ProviderId }) {
     if (thinkingValue !== thinking) setThinking(thinkingValue);
   }, [thinkingValue, thinking]);
 
-  async function handleSubmit(values: { prompt?: string; templateId?: string }) {
-    const templateId = values.templateId ?? "none";
+  async function submit() {
     const template = prompts?.find((item) => item.id === templateId);
     if (templateId !== "none" && !template) {
       await showToast({ style: Toast.Style.Failure, title: "Saved Prompt Missing", message: "Pick another template." });
       return;
     }
-    const prompt = composePrompt(template?.body, values.prompt ?? "");
-    if (!prompt) {
+    const composed = composePrompt(template?.body, prompt);
+    if (!composed) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Prompt Needed",
@@ -224,7 +225,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (!grantReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
+    if (available.length === 0 || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
       await showToast({
         style: Toast.Style.Animated,
         title: "Still Checking Models",
@@ -249,7 +250,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
         thinking={thinkingValue}
         thinkingLabel={catalog.levels.find((level) => level.id === thinkingValue)?.title ?? "CLI default"}
         note={listError ? undefined : catalog.note}
-        prompt={prompt}
+        prompt={composed}
         appleShortcutName={appleShortcutName}
         ollamaHost={ollamaHost}
         thinkingLevels={levels}
@@ -264,89 +265,158 @@ export function AskCommand(props: { provider?: ProviderId }) {
     );
   }
 
-  const cliHint = `\`${CLI_COMMAND[provider]}\` · ${cliPathFor(preferences, CLI_COMMAND[provider]) || "common install locations"}`;
+  function chooseProvider(value: string) {
+    if (!isProviderId(value) || value === provider || !available.includes(value)) return;
+    setProvider(value);
+    setModel(value === "anthropic" ? defaultModel : "");
+    setModels([]);
+    setListError(undefined);
+    setOllamaThinking(undefined);
+  }
+
+  const modelChip =
+    provider === "apple"
+      ? appleShortcutName
+      : provider === "anthropic"
+        ? model.trim() || "Current model"
+        : listLoading
+          ? "Checking…"
+          : (selected?.title ?? (listError ? "No model" : "No model"));
+  const thinkingChip =
+    catalog.levels.length > 0
+      ? (catalog.levels.find((level) => level.id === thinkingValue)?.title ?? thinkingValue)
+      : "None";
+  const thinkingTooltip = catalog.levels.length > 0 ? "Thinking" : (statusMessage ?? catalog.note ?? "Thinking");
+  const savedTitle = prompts?.find((item) => item.id === templateId)?.name ?? "None";
+
+  if (available.length === 0) {
+    return (
+      <List>
+        <List.EmptyView
+          title="No Signed-in AI"
+          description="Open Add AI and finish the Terminal sign-in for Claude, ChatGPT, or Grok."
+          actions={
+            <ActionPanel>
+              <Action
+                title="Open Extension Preferences"
+                icon={Icon.Gear}
+                onAction={() => void openExtensionPreferences()}
+              />
+            </ActionPanel>
+          }
+        />
+      </List>
+    );
+  }
+
+  const actions = (
+    <ActionPanel>
+      <Action title="Ask" icon={Icon.SpeechBubble} onAction={() => void submit()} />
+      <ActionPanel.Section title="Model">
+        {provider === "anthropic" ? (
+          <Action
+            title="Set Model"
+            icon={Icon.Pencil}
+            onAction={() => push(<ClaudeModelEditor value={model} onSave={setModel} />)}
+          />
+        ) : (
+          models.map((choice) => (
+            <Action
+              key={choice.id}
+              title={choice.title}
+              icon={choice.id === modelValue ? Icon.Check : Icon.Circle}
+              onAction={() => setModel(choice.id)}
+            />
+          ))
+        )}
+      </ActionPanel.Section>
+      {catalog.levels.length > 0 ? (
+        <ActionPanel.Section title="Thinking">
+          {catalog.levels.map((level) => (
+            <Action
+              key={level.id}
+              title={level.title}
+              icon={level.id === thinkingValue ? Icon.Check : Icon.Circle}
+              onAction={() => setThinking(level.id)}
+            />
+          ))}
+        </ActionPanel.Section>
+      ) : null}
+      <ActionPanel.Section title="Saved Prompt">
+        <Action
+          title="None"
+          icon={templateId === "none" ? Icon.Check : Icon.Circle}
+          onAction={() => setTemplateId("none")}
+        />
+        {(prompts ?? []).map((item) => (
+          <Action
+            key={item.id}
+            title={item.name}
+            icon={item.id === templateId ? Icon.Check : Icon.Circle}
+            onAction={() => setTemplateId(item.id)}
+          />
+        ))}
+      </ActionPanel.Section>
+      <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={() => void openExtensionPreferences()} />
+    </ActionPanel>
+  );
 
   return (
-    <Form
+    <List
       isLoading={prompts === undefined || listLoading || thinkingLoading}
+      searchText={prompt}
+      onSearchTextChange={setPrompt}
+      searchBarPlaceholder="What do you want to know?"
+      filtering={false}
+      navigationTitle="Ask"
+      searchBarAccessory={
+        <List.Dropdown tooltip="Signed-in AI" value={provider} onChange={chooseProvider}>
+          {available.map((id) => (
+            <List.Dropdown.Item key={id} value={id} title={PROVIDER_LABEL[id]} />
+          ))}
+        </List.Dropdown>
+      }
+    >
+      <List.Item
+        id="prompt"
+        title={{ value: "Prompt", tooltip: PROMPT_HELP }}
+        accessories={[
+          { tag: modelChip, tooltip: listError ?? "Model. Open Actions to change it." },
+          {
+            tag: thinkingChip,
+            tooltip: catalog.levels.length > 0 ? "Thinking. Open Actions to change it." : thinkingTooltip,
+          },
+        ]}
+        actions={actions}
+      />
+      <List.Item id="saved-prompt" title="Saved Prompt" subtitle={promptError ?? savedTitle} actions={actions} />
+    </List>
+  );
+}
+
+function ClaudeModelEditor(props: { value: string; onSave: (value: string) => void }) {
+  const { pop } = useNavigation();
+  return (
+    <Form
       actions={
         <ActionPanel>
-          <Action.SubmitForm title="Ask" onSubmit={handleSubmit} icon={Icon.SpeechBubble} />
-          <Action
-            title="Open Extension Preferences"
-            icon={Icon.Gear}
-            onAction={() => void openExtensionPreferences()}
+          <Action.SubmitForm
+            title="Use Model"
+            onSubmit={(values: { model?: string }) => {
+              props.onSave(values.model ?? "");
+              pop();
+            }}
           />
         </ActionPanel>
       }
     >
-      <Form.Description
-        title="How Asking Works"
-        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Claude, ChatGPT, and Grok sign in from Add AI. That screen opens Terminal for the subscription CLI and keeps the grant."
+      <Form.TextField
+        id="model"
+        title="Model"
+        defaultValue={props.value}
+        placeholder="Leave blank for Claude's current model"
+        info="Claude Code cannot list the models for this login. Leave this blank to use the model already selected in Claude Code, or type an id from /model."
       />
-      <Form.TextArea id="prompt" title="Prompt" placeholder="What do you want to know?" autoFocus enableMarkdown />
-      <Form.Dropdown id="templateId" title="Saved Prompt" defaultValue="none">
-        <Form.Dropdown.Item value="none" title="None" />
-        {(prompts ?? []).map((prompt) => (
-          <Form.Dropdown.Item key={prompt.id} value={prompt.id} title={prompt.name} />
-        ))}
-      </Form.Dropdown>
-      {promptError ? <Form.Description title="Saved Prompts" text={promptError} /> : null}
-      {locked ? (
-        <Form.Description title="Provider" text={PROVIDERS.find((item) => item.id === locked)?.title ?? locked} />
-      ) : (
-        <Form.Dropdown
-          id="provider"
-          title="Provider"
-          value={provider}
-          onChange={(value) => {
-            if (!isProviderId(value)) return;
-            setProvider(value);
-            setModel(value === "anthropic" ? defaultModel : "");
-            setModels([]);
-            setListError(undefined);
-            setOllamaThinking(undefined);
-          }}
-        >
-          {PROVIDERS.map((item) => (
-            <Form.Dropdown.Item key={item.id} value={item.id} title={item.title} />
-          ))}
-        </Form.Dropdown>
-      )}
-      {listError && provider === "anthropic" ? <Form.Description title="Sign-In" text={listError} /> : null}
-      {provider === "apple" ? (
-        <Form.Description title="Model" text={`Runs the “${appleShortcutName}” shortcut with the shortcuts command.`} />
-      ) : provider === "anthropic" ? (
-        <Form.TextField
-          id="claudeModel"
-          title="Model"
-          value={model}
-          placeholder="Leave blank for Claude's current model"
-          info="Claude Code cannot list the models for this login. Leave this blank to use the model already selected in Claude Code, or type an id from /model."
-          onChange={setModel}
-        />
-      ) : listLoading ? (
-        <Form.Description title="Model" text="Checking which models this account can use…" />
-      ) : models.length > 0 ? (
-        <Form.Dropdown id="model" title="Model" value={modelValue} onChange={setModel}>
-          {models.map((choice) => (
-            <Form.Dropdown.Item key={choice.id} value={choice.id} title={choice.title} />
-          ))}
-        </Form.Dropdown>
-      ) : (
-        <Form.Description title="Model" text={listError ?? "This account returned no models."} />
-      )}
-      {statusMessage ? <Form.Description title="Thinking Levels" text={statusMessage} /> : null}
-      {catalog.levels.length > 0 ? (
-        <Form.Dropdown id="thinking" title="Thinking" value={thinkingValue} info={cliHint} onChange={setThinking}>
-          {catalog.levels.map((level) => (
-            <Form.Dropdown.Item key={level.id} value={level.id} title={level.title} />
-          ))}
-        </Form.Dropdown>
-      ) : (
-        <Form.Description title="Thinking" text={catalog.note ?? "This model has no thinking levels."} />
-      )}
-      <Form.Description title="Command" text={cliHint} />
     </Form>
   );
 }
@@ -377,4 +447,12 @@ function resolveCatalog(input: {
     return { levels: [], note: "Checking this model's thinking levels…" };
   }
   return thinkingCatalog(input.provider, input.model, input.reported?.reported ? input.reported : undefined);
+}
+
+function readGrant(provider: "anthropic" | "openai" | "xai", home: string): boolean {
+  try {
+    return subscriptionAuthorized(provider, home);
+  } catch {
+    return false;
+  }
 }
