@@ -1,8 +1,5 @@
-import { homedir } from "os";
 import { commandEnv, resolveCliBinary } from "./binaries";
 import { ensureSignedIn, isAuthFailure, loginRequiredMessage } from "./cli-login";
-import { readStoredAccessToken } from "./oauth-login";
-import { isOAuthProviderId } from "./oauth-providers";
 import { ollamaEnv, parseOllamaList } from "./ollama";
 import { commandErrorText, runCommand } from "./process";
 import { type CliName, type ProviderId } from "./types";
@@ -70,9 +67,7 @@ export async function listAccountModels(input: {
   if ("error" in resolved) return { models: [], error: resolved.error };
 
   const signedIn = await ensureSignedIn(resolved.path, invocation.command, input.signal, input.home);
-  const storedToken =
-    isOAuthProviderId(input.provider) && readStoredAccessToken(input.provider, input.home ?? homedir());
-  if (signedIn && !storedToken) return { models: [], error: signedIn };
+  if (signedIn) return { models: [], error: signedIn };
 
   const env =
     input.provider === "ollama"

@@ -8,18 +8,18 @@ import {
   Toast,
   useNavigation,
 } from "@raycast/api";
+import { homedir } from "os";
 import { useEffect, useState } from "react";
 import { Answer } from "./answer";
-import { accountHome } from "./lib/account-name";
 import { resolveCliBinary } from "./lib/binaries";
-import { signInFirstMessage, type AddedAi } from "./lib/connection-json";
-import { loadAddedAis } from "./lib/connections";
+import { signInFirstMessage } from "./lib/connection-json";
 import { composePrompt } from "./lib/compose-prompt";
 import { listAccountModels, selectAccountModel, type AccountModel } from "./lib/models";
 import { readOllamaThinking, type OllamaThinking } from "./lib/ollama";
 import { cliPathFor, readPreferences } from "./lib/preferences";
 import { loadPrompts } from "./lib/prompts";
 import { selectThinking, thinkingCatalog, type ThinkingCatalog } from "./lib/thinking";
+import { isSubscriptionProvider, subscriptionAuthorized } from "./lib/subscription-login";
 import { CLI_COMMAND, isProviderId, PROVIDERS, type ProviderId, type SavedPrompt } from "./lib/types";
 
 export function AskCommand(props: { provider?: ProviderId }) {
@@ -48,25 +48,24 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
   const [thinkingLoading, setThinkingLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>();
-  const [connections, setConnections] = useState<AddedAi[] | undefined>();
+  const [grantReady, setGrantReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const { push } = useNavigation();
-  const added = connections?.find((item) => item.provider === provider);
-  const home = added ? accountHome(added.accountName) : undefined;
-  const connectionsReady = connections !== undefined;
+  const home = homedir();
 
   useEffect(() => {
-    let cancelled = false;
-    loadAddedAis()
-      .then((loaded) => {
-        if (!cancelled) setConnections(loaded);
-      })
-      .catch(() => {
-        if (!cancelled) setConnections([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!isSubscriptionProvider(provider)) {
+      setSignedIn(false);
+      setGrantReady(true);
+      return;
+    }
+    try {
+      setSignedIn(subscriptionAuthorized(provider, home));
+    } catch {
+      setSignedIn(false);
+    }
+    setGrantReady(true);
+  }, [provider, home]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,9 +84,9 @@ export function AskCommand(props: { provider?: ProviderId }) {
   }, []);
 
   useEffect(() => {
-    const needsOAuth = provider === "anthropic" || provider === "openai" || provider === "xai";
-    if (!connectionsReady) {
-      if (needsOAuth || provider === "ollama") setListLoading(true);
+    const needsSignIn = isSubscriptionProvider(provider);
+    if (!grantReady) {
+      if (needsSignIn || provider === "ollama") setListLoading(true);
       return;
     }
     if (provider === "apple") {
@@ -97,7 +96,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       setStatusMessage(undefined);
       return;
     }
-    if (needsOAuth && !added) {
+    if (needsSignIn && !signedIn) {
       setModels([]);
       setListError(signInFirstMessage(provider));
       setListLoading(false);
@@ -154,8 +153,8 @@ export function AskCommand(props: { provider?: ProviderId }) {
     grokCliPath,
     ollamaCliPath,
     home,
-    connectionsReady,
-    added,
+    grantReady,
+    signedIn,
   ]);
 
   useEffect(() => {
@@ -225,7 +224,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (!connectionsReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
+    if (!grantReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
       await showToast({
         style: Toast.Style.Animated,
         title: "Still Checking Models",
@@ -283,7 +282,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
     >
       <Form.Description
         title="How Asking Works"
-        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Claude, ChatGPT, and Grok sign in from Add AI with browser OAuth. Ask uses the credential saved there."
+        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Claude, ChatGPT, and Grok sign in from Add AI. That screen opens Terminal for the subscription CLI and keeps the grant."
       />
       <Form.TextArea id="prompt" title="Prompt" placeholder="What do you want to know?" autoFocus enableMarkdown />
       <Form.Dropdown id="templateId" title="Saved Prompt" defaultValue="none">

@@ -37,5 +37,5 @@ export function upsertAddedAi(items: AddedAi[], next: AddedAi): AddedAi[] {
 
 export function signInFirstMessage(provider: ProviderId): string {
   const label = PROVIDER_LABEL[provider];
-  return `${label} isn't signed in. Open Add AI, select ${label}, and finish the browser OAuth sign-in. That screen keeps the credential. Raycast settings cannot start the login.`;
+  return `${label} isn't signed in. Open Add AI, select ${label}, and finish the Terminal sign-in. That screen keeps the credential in providers.json. Raycast settings cannot start the login.`;
 }

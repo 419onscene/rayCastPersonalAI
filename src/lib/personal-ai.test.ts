@@ -29,15 +29,26 @@ import {
 import { ollamaThinkingFromOutput, parseOllamaList } from "./ollama";
 import { parsePrompts } from "./prompt-json";
 import { renderReply } from "./render-reply";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
-  accessTokenFromCredential,
-  accountIdFromIdToken,
-  authorizeUrl,
-  credentialDocument,
-  credentialPath,
-  oauthProvider,
-} from "./oauth-providers";
-import { createPkce } from "./oauth-pkce";
+  authorizeGrant,
+  chatgptLoginView,
+  claudeAccountLine,
+  claudeLoginView,
+  closeTerminalScript,
+  forgetGrant,
+  grokLoginView,
+  loginShell,
+  parseProviders,
+  providersFile,
+  quotedLoginCommand,
+  runSubscriptionSignIn,
+  subscriptionAuthorized,
+  terminalSignInScript,
+  terminalTarget,
+} from "./subscription-login";
 import { offeredLevel, selectThinking, thinkingCatalog } from "./thinking";
 import { type ProviderId, type ReplyDelta } from "./types";
 
@@ -329,7 +340,7 @@ describe("binary resolution", () => {
     assert.match(loginRequiredMessage("claude"), /claude auth login/);
     assert.match(loginRequiredMessage("claude"), /Add AI/);
     assert.match(loginRequiredMessage("claude"), /keeps the credential/);
-    assert.match(loginRequiredMessage("claude"), /OAuth/);
+    assert.match(loginRequiredMessage("claude"), /providers\.json/);
     assert.deepEqual(loginUrls("Open https://claude.ai/oauth/authorize?code=1 now"), [
       "https://claude.ai/oauth/authorize?code=1",
     ]);
@@ -350,61 +361,70 @@ describe("binary resolution", () => {
     assert.deepEqual(parseAddedAis("{"), []);
     assert.match(signInFirstMessage("openai"), /select ChatGPT/);
     assert.match(signInFirstMessage("openai"), /keeps the credential/);
-    assert.match(signInFirstMessage("openai"), /OAuth/);
+    assert.match(signInFirstMessage("openai"), /providers\.json/);
   });
 
-  it("builds browser OAuth URLs and credential files", () => {
-    const pkce = createPkce();
-    assert.notEqual(pkce.verifier, pkce.challenge);
-    const claude = authorizeUrl({
-      provider: oauthProvider("anthropic"),
-      challenge: pkce.challenge,
-      state: "state",
-      nonce: "nonce",
-    });
-    assert.match(claude, /^https:\/\/claude\.ai\/oauth\/authorize\?/);
-    assert.match(claude, /code_challenge_method=S256/);
-    assert.doesNotMatch(claude, /response_type=code&code=/);
-    const chatgpt = authorizeUrl({
-      provider: oauthProvider("openai"),
-      challenge: pkce.challenge,
-      state: "state",
-      nonce: "nonce",
-    });
-    assert.match(chatgpt, /redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback/);
-    assert.match(chatgpt, /api\.connectors\.read/);
-    const grok = authorizeUrl({
-      provider: oauthProvider("xai"),
-      challenge: pkce.challenge,
-      state: "state",
-      nonce: "nonce",
-    });
-    assert.match(grok, /127\.0\.0\.1%3A56121%2Fcallback/);
-    const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
-    const body = Buffer.from(
-      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" } }),
-    ).toString("base64url");
-    const idToken = `${header}.${body}.sig`;
-    assert.equal(accountIdFromIdToken(idToken), "acct_1");
-    const saved = credentialDocument(
-      "openai",
-      { accessToken: "access", refreshToken: "refresh", idToken },
-      new Date("2026-10-13T00:00:00.000Z"),
-    ) as { auth_mode: string; tokens: { account_id: string } };
-    assert.equal(saved.auth_mode, "chatgpt");
-    assert.equal(saved.tokens.account_id, "acct_1");
-    assert.equal(credentialPath("anthropic", "/Users/ada"), "/Users/ada/.claude/.credentials.json");
-    assert.equal(
-      accessTokenFromCredential(
-        "anthropic",
-        JSON.stringify(credentialDocument("anthropic", { accessToken: "claude-token" })),
-      ),
-      "claude-token",
-    );
-    assert.equal(
-      accessTokenFromCredential("xai", JSON.stringify(credentialDocument("xai", { accessToken: "grok-token" }))),
-      "grok-token",
-    );
+  it("records the subscription grant mailMateAI stores", async () => {
+    const home = mkdtempSync(join(tmpdir(), "personal-ai-grant-"));
+    try {
+      assert.equal(providersFile(home), join(home, "Library", "Application Support", "mailMateAI", "providers.json"));
+      const command = quotedLoginCommand("/Users/ada/.local/bin/claude", "anthropic");
+      const shell = loginShell(command, "/tmp/sentinel");
+      assert.match(shell, /auth' 'login'/);
+      assert.match(shell, /touch/);
+      const script = terminalSignInScript(shell);
+      assert.match(script, /tell application "Terminal"/);
+      assert.doesNotMatch(script, /claude\.ai\/oauth\/authorize/);
+      assert.equal(terminalTarget("tab 1 of window id 4821")?.windowId, 4821);
+      assert.match(closeTerminalScript(4821), /close theWindow/);
+      assert.equal(
+        claudeLoginView('{"loggedIn":true,"email":"ada@example.com","subscriptionType":"pro"}').loggedIn,
+        true,
+      );
+      assert.match(
+        claudeAccountLine(claudeLoginView('{"loggedIn":true,"email":"ada@example.com","subscriptionType":"pro"}')),
+        /ada@example.com/,
+      );
+      assert.equal(chatgptLoginView("Logged in using ChatGPT").ok, true);
+      assert.equal(chatgptLoginView("Signed in with an API key").ok, false);
+      assert.equal(grokLoginView(0, "grok-4.7\n").ok, true);
+      assert.equal(grokLoginView(1, "unauthenticated").ok, false);
+      const scripts: string[] = [];
+      const result = await runSubscriptionSignIn({
+        provider: "anthropic",
+        binary: "/Users/ada/.local/bin/claude",
+        home,
+        now: new Date("2026-10-13T19:00:00.000Z"),
+        exists: () => true,
+        sleep: async () => undefined,
+        openTerminal: async (opened) => {
+          scripts.push(opened);
+          return "tab 1 of window id 4821";
+        },
+        runStatus: async () => ({
+          code: 0,
+          stdout: '{"loggedIn":true,"email":"ada@example.com","subscriptionType":"pro"}',
+          stderr: "",
+        }),
+      });
+      assert.equal(result.grantPath, providersFile(home));
+      assert.match(result.account, /ada@example.com/);
+      assert.match(scripts[1] ?? "", /close theWindow/);
+      const saved = parseProviders(readFileSync(providersFile(home), "utf8"));
+      assert.equal(saved.claude?.authorized, true);
+      assert.equal(saved.claude?.method, "login");
+      assert.equal(saved.claude?.testedAt, "2026-10-13T19:00:00Z");
+      assert.equal(subscriptionAuthorized("anthropic", home), true);
+      assert.equal(JSON.stringify(saved).includes(".credentials.json"), false);
+      forgetGrant("anthropic", home);
+      assert.equal(subscriptionAuthorized("anthropic", home), false);
+      authorizeGrant("openai", home, new Date("2026-10-13T19:00:00.000Z"));
+      const both = parseProviders(readFileSync(providersFile(home), "utf8"));
+      assert.equal(both.chatgpt?.method, "login");
+      assert.equal(both.claude?.authorized, false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("checks common locations when the preference is blank", () => {

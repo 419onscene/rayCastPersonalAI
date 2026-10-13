@@ -25,7 +25,12 @@ export function candidatePaths(command: CliName, home: string): string[] {
     return [`${home}/.local/bin/claude`, "/opt/homebrew/bin/claude", "/usr/local/bin/claude"];
   }
   if (command === "codex") {
-    return [`${home}/.local/bin/codex`, "/opt/homebrew/bin/codex", "/usr/local/bin/codex"];
+    return [
+      `${home}/.local/bin/codex`,
+      `${home}/.codex/plugins/.plugin-appserver/codex-cli/bin/codex`,
+      "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
+    ];
   }
   if (command === "grok") {
     return [`${home}/.local/bin/grok`, `${home}/.grok/bin/grok`, "/opt/homebrew/bin/grok", "/usr/local/bin/grok"];

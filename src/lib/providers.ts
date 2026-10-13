@@ -1,4 +1,4 @@
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { runAppleShortcut } from "./apple";
 import { commandEnv, resolveCliBinary } from "./binaries";
 import { ensureSignedIn, isAuthFailure, loginRequiredMessage } from "./cli-login";
@@ -10,8 +10,6 @@ import {
   deltasFromGrokLine,
   splitLines,
 } from "./cli-output";
-import { readStoredAccessToken } from "./oauth-login";
-import { isOAuthProviderId } from "./oauth-providers";
 import { commandErrorText, streamCommand } from "./process";
 import { type CliName, CLI_COMMAND, type ProviderId, type ReplyDelta } from "./types";
 
@@ -69,17 +67,11 @@ export async function generateReply(
     thinkingLevels: input.thinkingLevels,
   });
   const binary = resolveOrThrow(command.command, preferencePath(input, command.command), input.home);
-  const storedToken = isOAuthProviderId(input.provider)
-    ? readStoredAccessToken(input.provider, input.home ?? homedir())
-    : undefined;
   const signedIn = await ensureSignedIn(binary, command.command, handlers.signal, input.home);
-  if (signedIn && !storedToken) throw new Error(signedIn);
+  if (signedIn) throw new Error(signedIn);
   const env = commandEnv(
     binary,
-    {
-      ...(input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : {}),
-      ...(input.provider === "anthropic" && storedToken ? { CLAUDE_CODE_OAUTH_TOKEN: storedToken } : {}),
-    },
+    input.provider === "ollama" && input.ollamaHost.trim() ? { OLLAMA_HOST: input.ollamaHost.trim() } : undefined,
     input.home,
   );
 

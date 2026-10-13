@@ -1,87 +1,105 @@
 import { Action, ActionPanel, Alert, confirmAlert, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
 import { homedir } from "os";
 import { useCallback, useEffect, useState } from "react";
-import { loadAddedAis, removeAddedAi } from "./lib/connections";
-import { type AddedAi } from "./lib/connection-json";
-import { removeCredential } from "./lib/oauth-login";
-import { OAUTH_PROVIDERS, type OAuthProviderId } from "./lib/oauth-providers";
-import { oauthClient } from "./oauth-clients";
+import { commandEnv, resolveCliBinary } from "./lib/binaries";
+import { cliPathFor, readPreferences } from "./lib/preferences";
+import { runCommand } from "./lib/process";
+import {
+  forgetGrant,
+  readProviders,
+  SUBSCRIPTIONS,
+  subscription,
+  type SubscriptionProviderId,
+} from "./lib/subscription-login";
+import { oauthClient, showSubscriptionAccount } from "./oauth-clients";
 import { ProviderLogin } from "./provider-login";
 
 export default function Command() {
-  const [connections, setConnections] = useState<AddedAi[] | undefined>(undefined);
+  const [ready, setReady] = useState(false);
+  const [authorized, setAuthorized] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string>();
   const { push } = useNavigation();
+  const preferences = readPreferences();
 
   const reload = useCallback(() => {
-    loadAddedAis()
-      .then((loaded) => {
-        setConnections(loaded);
-        setError(undefined);
-      })
-      .catch((caught: unknown) => {
-        setConnections([]);
-        setError(caught instanceof Error ? caught.message : "Couldn't load saved sign-ins.");
-      });
+    try {
+      const home = homedir();
+      const grants = readProviders(home);
+      const next: Record<string, boolean> = {};
+      for (const provider of SUBSCRIPTIONS) {
+        next[provider.id] = grants[provider.grantKey]?.authorized === true;
+        if (next[provider.id]) void showSubscriptionAccount(provider.id).catch(() => undefined);
+      }
+      setAuthorized(next);
+      setError(undefined);
+    } catch (caught) {
+      setAuthorized({});
+      setError(caught instanceof Error ? caught.message : "Couldn't load saved sign-ins.");
+    } finally {
+      setReady(true);
+    }
   }, []);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  async function remove(provider: OAuthProviderId, title: string) {
+  async function logOut(provider: SubscriptionProviderId, title: string) {
     const confirmed = await confirmAlert({
-      title: "Remove Saved Sign-In",
-      message: `Remove the saved ${title} OAuth credential from this Mac?`,
-      primaryAction: { title: "Remove Sign-In", style: Alert.ActionStyle.Destructive },
+      title: `Log Out of ${title}`,
+      message: `Sign out of the ${title} subscription and drop the saved grant?`,
+      primaryAction: { title: "Log Out", style: Alert.ActionStyle.Destructive },
     });
     if (!confirmed) return;
+    const spec = subscription(provider);
+    const preferencePath = cliPathFor(preferences, spec.command);
+    const resolved = resolveCliBinary({ command: spec.command, preferencePath, home: homedir() });
     try {
-      await removeAddedAi(provider);
-      removeCredential(provider, homedir());
+      if ("path" in resolved) {
+        await runCommand(resolved.path, spec.logoutArgs, {
+          env: commandEnv(resolved.path, undefined, homedir()),
+        });
+      }
+      forgetGrant(provider, homedir());
       await oauthClient(provider).removeTokens();
       reload();
-      await showToast({ style: Toast.Style.Success, title: "Saved Sign-In Removed" });
+      await showToast({ style: Toast.Style.Success, title: `${title} Logged Out` });
     } catch (caught) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Couldn't Remove Sign-In",
-        message: caught instanceof Error ? caught.message : "Local storage rejected the delete.",
+        title: "Couldn't Log Out",
+        message: caught instanceof Error ? caught.message : "The subscription CLI rejected log out.",
       });
     }
   }
 
   return (
-    <List
-      isLoading={connections === undefined}
-      navigationTitle="Add AI"
-      searchBarPlaceholder="Choose Claude, ChatGPT, or Grok"
-    >
+    <List isLoading={!ready} navigationTitle="Add AI" searchBarPlaceholder="Choose Claude, ChatGPT, or Grok">
       {error ? (
         <List.EmptyView title="Couldn't Load Sign-Ins" description={error} />
-      ) : connections === undefined ? null : (
-        OAUTH_PROVIDERS.map((provider) => {
-          const added = connections?.find((item) => item.provider === provider.id);
+      ) : !ready ? null : (
+        SUBSCRIPTIONS.map((provider) => {
+          const signedIn = authorized[provider.id] === true;
           return (
             <List.Item
               key={provider.id}
-              icon={added ? Icon.CheckCircle : Icon.Plus}
+              icon={signedIn ? Icon.CheckCircle : Icon.Plus}
               title={provider.title}
-              subtitle={added ? "OAuth credential saved" : "Not signed in"}
-              accessories={[{ text: added ? "Credential saved" : "OAuth" }]}
+              subtitle={signedIn ? `Authorized with the ${provider.title} subscription.` : "Not signed in"}
+              accessories={[{ text: signedIn ? "Grant saved" : "Sign in" }]}
               actions={
                 <ActionPanel>
                   <Action
-                    title={added ? `Sign In to ${provider.title} Again` : `Sign In to ${provider.title}`}
-                    icon={Icon.Globe}
+                    title={signedIn ? "Sign in Again" : "Sign in"}
+                    icon={Icon.Terminal}
                     onAction={() => push(<ProviderLogin provider={provider.id} onSaved={reload} />)}
                   />
-                  {added ? (
+                  {signedIn ? (
                     <Action
-                      title="Remove Saved Sign-In"
+                      title="Log out"
                       icon={Icon.Trash}
                       style={Action.Style.Destructive}
-                      onAction={() => void remove(provider.id, provider.title)}
+                      onAction={() => void logOut(provider.id, provider.title)}
                     />
                   ) : null}
                 </ActionPanel>

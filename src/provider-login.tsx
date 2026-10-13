@@ -1,61 +1,70 @@
-import { Action, ActionPanel, Detail, Form, Icon, open, showToast, Toast, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Detail, Form, Icon, showToast, Toast, useNavigation } from "@raycast/api";
 import { homedir } from "os";
 import { useEffect, useRef, useState } from "react";
-import { detectedAccountName } from "./lib/account-name";
-import { saveAccountName } from "./lib/account-store";
-import { saveAddedAi } from "./lib/connections";
-import { runOAuthLogin } from "./lib/oauth-login";
-import { credentialPath, oauthProvider, type OAuthProviderId } from "./lib/oauth-providers";
-import { oauthClient } from "./oauth-clients";
+import { resolveCliBinary } from "./lib/binaries";
+import { cliPathFor, readPreferences } from "./lib/preferences";
+import {
+  providersFile,
+  quotedLoginCommand,
+  runSubscriptionSignIn,
+  subscription,
+  type SubscriptionProviderId,
+} from "./lib/subscription-login";
+import { showSubscriptionAccount } from "./oauth-clients";
 
-export function ProviderLogin(props: { provider: OAuthProviderId; onSaved: () => void }) {
-  const provider = oauthProvider(props.provider);
+export function ProviderLogin(props: { provider: SubscriptionProviderId; onSaved: () => void }) {
+  const provider = subscription(props.provider);
   const [phase, setPhase] = useState<"ready" | "waiting" | "saved" | "failed">("ready");
   const [detail, setDetail] = useState("");
-  const [savedPath, setSavedPath] = useState("");
+  const [account, setAccount] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const { pop } = useNavigation();
+  const preferences = readPreferences();
+  const home = homedir();
+  const command = quotedLoginCommand(provider.command, props.provider);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
 
   async function signIn() {
-    const home = homedir();
+    const resolved = resolveCliBinary({
+      command: provider.command,
+      preferencePath: cliPathFor(preferences, provider.command),
+      home,
+    });
+    if ("error" in resolved) {
+      setDetail(resolved.error);
+      setPhase("failed");
+      return;
+    }
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
     setPhase("waiting");
-    setDetail(`Opening ${provider.title} in the browser. Leave this screen open until the credential is saved.`);
+    setDetail(
+      `Opening Terminal for ${command}. Finish the subscription login there. This screen stays open until the grant is saved.`,
+    );
     try {
-      const result = await runOAuthLogin({
+      const result = await runSubscriptionSignIn({
         provider: props.provider,
+        binary: resolved.path,
         home,
         signal: controller.signal,
-        openUrl: open,
       });
       if (controller.signal.aborted) return;
-      await oauthClient(props.provider).setTokens({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        idToken: result.idToken,
-        expiresIn: result.expiresIn,
-        scope: result.scope,
-      });
-      const accountName = detectedAccountName(home);
-      await saveAccountName(accountName);
-      await saveAddedAi({ provider: props.provider, accountName, signedInAt: Date.now() });
+      await showSubscriptionAccount(props.provider);
       props.onSaved();
-      setSavedPath(result.credentialPath);
+      setAccount(result.account);
       setPhase("saved");
       await showToast({
         style: Toast.Style.Success,
         title: "Credential Saved",
-        message: `${provider.title} OAuth is stored for this Mac.`,
+        message: result.account,
       });
     } catch (caught) {
       if (controller.signal.aborted) return;
-      setDetail(caught instanceof Error ? caught.message : "OAuth sign-in failed.");
+      setDetail(caught instanceof Error ? caught.message : "Sign-in failed.");
       setPhase("failed");
     }
   }
@@ -63,9 +72,9 @@ export function ProviderLogin(props: { provider: OAuthProviderId; onSaved: () =>
   if (phase !== "ready") {
     const markdown =
       phase === "saved"
-        ? `## Credential saved\n\n${provider.title} OAuth is stored at \`${savedPath}\`.\n\nRaycast settings shows this account and can log it out. Ask uses the saved credential.`
+        ? `## Credential saved\n\n${account}\n\nThe grant is stored at \`${providersFile(home)}\` under \`${provider.grantKey}\`, with method \`login\`.\n\nRaycast settings shows this account.`
         : phase === "failed"
-          ? `## OAuth sign-in stopped\n\n${detail}`
+          ? `## Sign-in stopped\n\n${detail}`
           : `## Waiting for ${provider.title}\n\n${detail}`;
     return (
       <Detail
@@ -76,7 +85,7 @@ export function ProviderLogin(props: { provider: OAuthProviderId; onSaved: () =>
           <ActionPanel>
             {phase === "saved" ? <Action title="Done" icon={Icon.Check} onAction={pop} /> : null}
             {phase === "failed" ? (
-              <Action title="Try OAuth Again" icon={Icon.ArrowClockwise} onAction={() => void signIn()} />
+              <Action title="Try Again" icon={Icon.ArrowClockwise} onAction={() => void signIn()} />
             ) : null}
           </ActionPanel>
         }
@@ -89,15 +98,19 @@ export function ProviderLogin(props: { provider: OAuthProviderId; onSaved: () =>
       navigationTitle={`Sign In to ${provider.title}`}
       actions={
         <ActionPanel>
-          <Action title="Sign In with OAuth" icon={Icon.Globe} onAction={() => void signIn()} />
+          <Action title="Sign in" icon={Icon.Terminal} onAction={() => void signIn()} />
         </ActionPanel>
       }
     >
       <Form.Description
         title={provider.title}
-        text="Raycast settings cannot open this login. This screen starts the provider's OAuth page in your browser and keeps the credential when the browser returns."
+        text="Raycast settings cannot open this login. Sign In opens Terminal for the subscription CLI. Finish the login there. This screen records the grant when the CLI exits successfully."
       />
-      <Form.Description title="Credential" text={`Saved at ${credentialPath(props.provider, homedir())}.`} />
+      <Form.Description title="Command" text={command} />
+      <Form.Description
+        title="Credential"
+        text={`Saved at ${providersFile(home)} under ${provider.grantKey}, with method login. Raycast settings then shows this account.`}
+      />
     </Form>
   );
 }

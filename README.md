@@ -46,7 +46,7 @@ Each command is declared separately so you can bind them independently:
 | Ask Apple Intelligence | Locked to your Shortcut. Calls `shortcuts`.                                                               |
 | Open in Claude         | Opens the Claude desktop app with the prompt filled in.                                                   |
 | Open in ChatGPT        | Opens the ChatGPT desktop app and pastes the prompt into a new chat.                                      |
-| Add AI                 | OAuth screen for Claude, ChatGPT, and Grok. Settings cannot start this login.                             |
+| Add AI                 | Sign-in screen for Claude, ChatGPT, and Grok. Settings cannot start this login.                           |
 | Manage Saved Prompts   | Create, edit, and delete templates.                                                                       |
 
 ## Local CLIs
@@ -75,13 +75,13 @@ Search order after the prefilled path:
 
 If you replace a prefilled path with a different file and that file is missing, the command stops.
 
-Raycast's extension settings page cannot host a login button. **Add AI** is the OAuth screen. It lists Claude, ChatGPT, and Grok. Choose one and choose **Sign In with OAuth**. The provider's browser login opens. This screen stays open until the browser returns, then the credential is written for that CLI:
+Raycast's extension settings page cannot host a login button. **Add AI** is the sign-in screen. It lists Claude, ChatGPT, and Grok. Apple Intelligence is not on that list. Choose a provider and choose **Sign In**. Terminal opens and runs the subscription CLI:
 
-- Claude: `~/.claude/.credentials.json`
-- ChatGPT: `~/.codex/auth.json`
-- Grok: `~/.grok/auth.json`
+- Claude: `claude auth login`
+- ChatGPT: `codex login`, and the status must say `logged in using ChatGPT`
+- Grok: `grok login`, then `grok models` must succeed
 
-Raycast also keeps the token, so the settings page can show that account and log it out. Apple Intelligence is not a sign-in. Ollama stays local. Ask uses Claude, ChatGPT, or Grok only after that OAuth credential is saved.
+When that login succeeds, Terminal closes and the grant is written to `~/Library/Application Support/mailMateAI/providers.json` with `authorized: true` and `method: "login"`. The CLI keeps the login it completed. Raycast settings then shows that account. Ollama stays local. Ask uses Claude, ChatGPT, or Grok only after that grant is saved.
 
 Claude Code has no command that lists the models for this login, so Ask Claude does not show a model menu. Leave Model blank and the run uses the model already selected in Claude Code. Type an id from Claude's `/model` command when you want a different one. ChatGPT, Grok, and Ollama still show only the models their list commands return.
 
@@ -104,7 +104,7 @@ Open **Raycast Settings → Extensions → Personal AI**.
 | Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                                                                                                                |
 | Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                                                                                                                   |
 
-There are no API-key preferences. **Add AI** is where Claude, ChatGPT, and Grok OAuth is stored. The settings page lists CLI paths and, after a sign-in, the logout control for that account.
+There are no API-key preferences. **Add AI** is where Claude, ChatGPT, and Grok grants are stored. The settings page lists CLI paths and, after a sign-in, shows that account.
 
 ## Saved prompts
 
