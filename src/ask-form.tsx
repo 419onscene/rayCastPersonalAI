@@ -3,7 +3,6 @@ import {
   ActionPanel,
   Form,
   Icon,
-  List,
   openExtensionPreferences,
   showToast,
   Toast,
@@ -12,7 +11,15 @@ import {
 import { homedir } from "os";
 import { useEffect, useMemo, useState } from "react";
 import { Answer } from "./answer";
-import { askableProviders, initialProvider, PROMPT_HELP } from "./lib/ask-providers";
+import { PromptEditor } from "./prompt-editor";
+import {
+  ADD_SAVED_PROMPT,
+  askableProviders,
+  initialProvider,
+  PROMPT_HELP,
+  savedPromptOptions,
+  withCreatedPrompt,
+} from "./lib/ask-providers";
 import { resolveCliBinary } from "./lib/binaries";
 import { composePrompt } from "./lib/compose-prompt";
 import { listAccountModels, selectAccountModel, type AccountModel } from "./lib/models";
@@ -225,7 +232,15 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (available.length === 0 || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
+    if (available.length === 0) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Sign-In Needed",
+        message: "Open Add AI and finish the Terminal sign-in.",
+      });
+      return;
+    }
+    if (listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
       await showToast({
         style: Toast.Style.Animated,
         title: "Still Checking Models",
@@ -274,149 +289,125 @@ export function AskCommand(props: { provider?: ProviderId }) {
     setOllamaThinking(undefined);
   }
 
-  const modelChip =
-    provider === "apple"
-      ? appleShortcutName
-      : provider === "anthropic"
-        ? model.trim() || "Current model"
-        : listLoading
-          ? "Checking…"
-          : (selected?.title ?? (listError ? "No model" : "No model"));
-  const thinkingChip =
-    catalog.levels.length > 0
-      ? (catalog.levels.find((level) => level.id === thinkingValue)?.title ?? thinkingValue)
-      : "None";
-  const thinkingTooltip = catalog.levels.length > 0 ? "Thinking" : (statusMessage ?? catalog.note ?? "Thinking");
-  const savedTitle = prompts?.find((item) => item.id === templateId)?.name ?? "None";
-
-  if (available.length === 0) {
-    return (
-      <List>
-        <List.EmptyView
-          title="No Signed-in AI"
-          description="Open Add AI and finish the Terminal sign-in for Claude, ChatGPT, or Grok."
-          actions={
-            <ActionPanel>
-              <Action
-                title="Open Extension Preferences"
-                icon={Icon.Gear}
-                onAction={() => void openExtensionPreferences()}
-              />
-            </ActionPanel>
-          }
-        />
-      </List>
-    );
+  function chooseTemplate(value: string) {
+    if (value === ADD_SAVED_PROMPT) {
+      push(
+        <PromptEditor
+          onSaved={(saved) => {
+            setPrompts((current) => withCreatedPrompt(current ?? [], saved));
+            setTemplateId(saved.id);
+          }}
+        />,
+      );
+      return;
+    }
+    if (value === "none" || (prompts ?? []).some((item) => item.id === value)) setTemplateId(value);
   }
 
-  const actions = (
-    <ActionPanel>
-      <Action title="Ask" icon={Icon.SpeechBubble} onAction={() => void submit()} />
-      <ActionPanel.Section title="Model">
-        {provider === "anthropic" ? (
-          <Action
-            title="Set Model"
-            icon={Icon.Pencil}
-            onAction={() => push(<ClaudeModelEditor value={model} onSave={setModel} />)}
-          />
-        ) : (
-          models.map((choice) => (
-            <Action
-              key={choice.id}
-              title={choice.title}
-              icon={choice.id === modelValue ? Icon.Check : Icon.Circle}
-              onAction={() => setModel(choice.id)}
-            />
-          ))
-        )}
-      </ActionPanel.Section>
-      {catalog.levels.length > 0 ? (
-        <ActionPanel.Section title="Thinking">
-          {catalog.levels.map((level) => (
-            <Action
-              key={level.id}
-              title={level.title}
-              icon={level.id === thinkingValue ? Icon.Check : Icon.Circle}
-              onAction={() => setThinking(level.id)}
-            />
-          ))}
-        </ActionPanel.Section>
-      ) : null}
-      <ActionPanel.Section title="Saved Prompt">
-        <Action
-          title="None"
-          icon={templateId === "none" ? Icon.Check : Icon.Circle}
-          onAction={() => setTemplateId("none")}
-        />
-        {(prompts ?? []).map((item) => (
-          <Action
-            key={item.id}
-            title={item.name}
-            icon={item.id === templateId ? Icon.Check : Icon.Circle}
-            onAction={() => setTemplateId(item.id)}
-          />
-        ))}
-      </ActionPanel.Section>
-      <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={() => void openExtensionPreferences()} />
-    </ActionPanel>
-  );
+  const templateOptions = savedPromptOptions(prompts ?? []);
+  const templateValue = templateOptions.some((option) => option.value === templateId) ? templateId : "none";
+  const thinkingChoices = catalog.levels.length > 0 ? catalog.levels : [{ id: "none", title: "None" }];
+  const thinkingChoice = thinkingChoices.some((level) => level.id === thinkingValue)
+    ? thinkingValue
+    : thinkingChoices[0].id;
+  const modelChoices =
+    provider === "apple"
+      ? [{ id: "shortcut", title: appleShortcutName }]
+      : models.length > 0
+        ? models.map((choice) => ({ id: choice.id, title: choice.title }))
+        : [{ id: "unavailable", title: listLoading ? "Checking…" : "No model" }];
+  const modelChoice = modelChoices.some((choice) => choice.id === modelValue) ? modelValue : modelChoices[0].id;
 
-  return (
-    <List
-      isLoading={prompts === undefined || listLoading || thinkingLoading}
-      searchText={prompt}
-      onSearchTextChange={setPrompt}
-      searchBarPlaceholder="What do you want to know?"
-      filtering={false}
-      navigationTitle="Ask"
-      searchBarAccessory={
-        <List.Dropdown tooltip="Signed-in AI" value={provider} onChange={chooseProvider}>
-          {available.map((id) => (
-            <List.Dropdown.Item key={id} value={id} title={PROVIDER_LABEL[id]} />
-          ))}
-        </List.Dropdown>
-      }
-    >
-      <List.Item
-        id="prompt"
-        title={{ value: "Prompt", tooltip: PROMPT_HELP }}
-        accessories={[
-          { tag: modelChip, tooltip: listError ?? "Model. Open Actions to change it." },
-          {
-            tag: thinkingChip,
-            tooltip: catalog.levels.length > 0 ? "Thinking. Open Actions to change it." : thinkingTooltip,
-          },
-        ]}
-        actions={actions}
-      />
-      <List.Item id="saved-prompt" title="Saved Prompt" subtitle={promptError ?? savedTitle} actions={actions} />
-    </List>
-  );
-}
-
-function ClaudeModelEditor(props: { value: string; onSave: (value: string) => void }) {
-  const { pop } = useNavigation();
   return (
     <Form
+      isLoading={prompts === undefined || listLoading || thinkingLoading}
+      navigationTitle="Ask"
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Use Model"
-            onSubmit={(values: { model?: string }) => {
-              props.onSave(values.model ?? "");
-              pop();
-            }}
+          <Action.SubmitForm title="Ask" onSubmit={() => void submit()} />
+          <Action
+            title="Open Extension Preferences"
+            icon={Icon.Gear}
+            onAction={() => void openExtensionPreferences()}
           />
         </ActionPanel>
       }
     >
-      <Form.TextField
-        id="model"
-        title="Model"
-        defaultValue={props.value}
-        placeholder="Leave blank for Claude's current model"
-        info="Claude Code cannot list the models for this login. Leave this blank to use the model already selected in Claude Code, or type an id from /model."
+      <Form.TextArea
+        id="prompt"
+        title="Prompt"
+        placeholder="What do you want to know?"
+        info={PROMPT_HELP}
+        value={prompt}
+        onChange={setPrompt}
+        autoFocus
+        enableMarkdown
       />
+      {available.length === 0 ? (
+        <Form.Description
+          title="Sign-In"
+          text="Open Add AI and finish the Terminal sign-in for Claude, ChatGPT, or Grok."
+        />
+      ) : (
+        <Form.Dropdown id="provider" title="Provider" value={provider} onChange={chooseProvider}>
+          {available.map((id) => (
+            <Form.Dropdown.Item key={id} value={id} title={PROVIDER_LABEL[id]} />
+          ))}
+        </Form.Dropdown>
+      )}
+      {available.length === 0 ? null : provider === "anthropic" ? (
+        <Form.TextField
+          id="claudeModel"
+          title="Model"
+          value={model}
+          placeholder="Leave blank for Claude's current model"
+          info="Claude Code cannot list the models for this login. Leave this blank to use the model already selected in Claude Code, or type an id from /model."
+          onChange={setModel}
+        />
+      ) : (
+        <Form.Dropdown
+          id="model"
+          title="Model"
+          value={modelChoice}
+          info={listError}
+          onChange={(value) => {
+            if (models.some((choice) => choice.id === value)) setModel(value);
+          }}
+        >
+          {modelChoices.map((choice) => (
+            <Form.Dropdown.Item key={choice.id} value={choice.id} title={choice.title} />
+          ))}
+        </Form.Dropdown>
+      )}
+      <Form.Dropdown
+        id="thinking"
+        title="Thinking"
+        value={thinkingChoice}
+        info={catalog.levels.length > 0 ? undefined : (statusMessage ?? catalog.note)}
+        onChange={(value) => {
+          if (catalog.levels.some((level) => level.id === value)) setThinking(value);
+        }}
+      >
+        {thinkingChoices.map((level) => (
+          <Form.Dropdown.Item key={level.id} value={level.id} title={level.title} />
+        ))}
+      </Form.Dropdown>
+      <Form.Dropdown
+        id="templateId"
+        title="Saved Prompt"
+        value={templateValue}
+        info={promptError}
+        onChange={chooseTemplate}
+      >
+        {templateOptions.map((option) => (
+          <Form.Dropdown.Item
+            key={option.value}
+            value={option.value}
+            title={option.title}
+            icon={option.value === ADD_SAVED_PROMPT ? Icon.Plus : undefined}
+          />
+        ))}
+      </Form.Dropdown>
     </Form>
   );
 }

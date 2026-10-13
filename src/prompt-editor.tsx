@@ -2,7 +2,7 @@ import { Action, ActionPanel, Form, showToast, Toast, useNavigation } from "@ray
 import { createPrompt, updatePrompt } from "./lib/prompts";
 import { type SavedPrompt } from "./lib/types";
 
-export function PromptEditor(props: { prompt?: SavedPrompt; onSaved: () => void }) {
+export function PromptEditor(props: { prompt?: SavedPrompt; onSaved: (prompt: SavedPrompt) => void }) {
   const { pop } = useNavigation();
   const editing = Boolean(props.prompt);
 
@@ -18,9 +18,11 @@ export function PromptEditor(props: { prompt?: SavedPrompt; onSaved: () => void 
       return;
     }
     try {
+      const saved = props.prompt
+        ? { ...props.prompt, name, body, updatedAt: Date.now() }
+        : await createPrompt(name, body);
       if (props.prompt) await updatePrompt(props.prompt.id, name, body);
-      else await createPrompt(name, body);
-      props.onSaved();
+      props.onSaved(saved);
       await showToast({ style: Toast.Style.Success, title: editing ? "Saved Prompt Updated" : "Saved Prompt Created" });
       pop();
     } catch (error) {

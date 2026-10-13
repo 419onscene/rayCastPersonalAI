@@ -50,7 +50,13 @@ import {
   terminalTarget,
 } from "./subscription-login";
 import { offeredLevel, selectThinking, thinkingCatalog } from "./thinking";
-import { askableProviders, initialProvider } from "./ask-providers";
+import {
+  ADD_SAVED_PROMPT,
+  askableProviders,
+  initialProvider,
+  savedPromptOptions,
+  withCreatedPrompt,
+} from "./ask-providers";
 import { type ProviderId, type ReplyDelta } from "./types";
 
 describe("ask providers", () => {
@@ -64,6 +70,17 @@ describe("ask providers", () => {
       "ollama",
     ]);
     assert.deepEqual(askableProviders({ claude: false, chatgpt: false, grok: true, includeLocal: "xai" }), ["xai"]);
+  });
+
+  it("offers None, each saved prompt, and Add New", () => {
+    const options = savedPromptOptions([{ id: "weekly", name: "Weekly status" }]);
+    assert.deepEqual(
+      options.map((option) => option.title),
+      ["None", "Weekly status", "Add New"],
+    );
+    assert.equal(options.at(-1)?.value, ADD_SAVED_PROMPT);
+    const created = { id: "new", name: "Launch notes" };
+    assert.deepEqual(withCreatedPrompt([{ id: "weekly", name: "Weekly status" }], created)[0], created);
   });
 
   it("starts on the launched service when it is signed in, otherwise the first signed-in service", () => {

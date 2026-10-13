@@ -19,6 +19,20 @@ export function askableProviders(input: {
   return ids;
 }
 
+export const ADD_SAVED_PROMPT = "add-new";
+
+export function savedPromptOptions(prompts: { id: string; name: string }[]): { value: string; title: string }[] {
+  return [
+    { value: "none", title: "None" },
+    ...prompts.map((prompt) => ({ value: prompt.id, title: prompt.name })),
+    { value: ADD_SAVED_PROMPT, title: "Add New" },
+  ];
+}
+
+export function withCreatedPrompt<T extends { id: string }>(current: T[], created: T): T[] {
+  return [created, ...current.filter((item) => item.id !== created.id)];
+}
+
 export function initialProvider(
   available: ProviderId[],
   launched: ProviderId | undefined,

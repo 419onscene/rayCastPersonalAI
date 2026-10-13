@@ -38,7 +38,7 @@ Each command is declared separately so you can bind them independently:
 
 | Command                | What it does                                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| Ask                    | Prompt window. The provider menu lists signed-in services. Model and thinking sit on one row.             |
+| Ask                    | Prompt window. Provider, model, thinking, and saved prompt are dropdowns.                                 |
 | Ask Claude             | Same window, starting on Claude when that account is signed in.                                           |
 | Ask ChatGPT            | Same window, starting on ChatGPT when that account is signed in.                                          |
 | Ask Grok               | Same window, starting on Grok when that account is signed in.                                             |
@@ -110,7 +110,7 @@ There are no API-key preferences. **Add AI** is where Claude, ChatGPT, and Grok 
 
 Run **Manage Saved Prompts** to create, edit, or delete templates. They are stored in Raycast LocalStorage on this Mac.
 
-In any Ask command, choose a saved prompt from Actions. The text you type is appended after the template, separated by a blank line. You can send a template alone, typed text alone, or both. An empty prompt is rejected. Desktop commands still choose a saved prompt in the dropdown.
+In Ask, choose a saved prompt from the dropdown, or choose Add New, name the template, and save it. The new template is selected. The text you type is appended after the template, separated by a blank line. You can send a template alone, typed text alone, or both. An empty prompt is rejected. Desktop commands still choose a saved prompt in the dropdown.
 
 ## Account models
 
