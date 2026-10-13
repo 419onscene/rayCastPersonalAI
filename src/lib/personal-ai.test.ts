@@ -29,6 +29,15 @@ import {
 import { ollamaThinkingFromOutput, parseOllamaList } from "./ollama";
 import { parsePrompts } from "./prompt-json";
 import { renderReply } from "./render-reply";
+import {
+  accessTokenFromCredential,
+  accountIdFromIdToken,
+  authorizeUrl,
+  credentialDocument,
+  credentialPath,
+  oauthProvider,
+} from "./oauth-providers";
+import { createPkce } from "./oauth-pkce";
 import { offeredLevel, selectThinking, thinkingCatalog } from "./thinking";
 import { type ProviderId, type ReplyDelta } from "./types";
 
@@ -320,6 +329,7 @@ describe("binary resolution", () => {
     assert.match(loginRequiredMessage("claude"), /claude auth login/);
     assert.match(loginRequiredMessage("claude"), /Add AI/);
     assert.match(loginRequiredMessage("claude"), /keeps the credential/);
+    assert.match(loginRequiredMessage("claude"), /OAuth/);
     assert.deepEqual(loginUrls("Open https://claude.ai/oauth/authorize?code=1 now"), [
       "https://claude.ai/oauth/authorize?code=1",
     ]);
@@ -340,6 +350,61 @@ describe("binary resolution", () => {
     assert.deepEqual(parseAddedAis("{"), []);
     assert.match(signInFirstMessage("openai"), /select ChatGPT/);
     assert.match(signInFirstMessage("openai"), /keeps the credential/);
+    assert.match(signInFirstMessage("openai"), /OAuth/);
+  });
+
+  it("builds browser OAuth URLs and credential files", () => {
+    const pkce = createPkce();
+    assert.notEqual(pkce.verifier, pkce.challenge);
+    const claude = authorizeUrl({
+      provider: oauthProvider("anthropic"),
+      challenge: pkce.challenge,
+      state: "state",
+      nonce: "nonce",
+    });
+    assert.match(claude, /^https:\/\/claude\.ai\/oauth\/authorize\?/);
+    assert.match(claude, /code_challenge_method=S256/);
+    assert.doesNotMatch(claude, /response_type=code&code=/);
+    const chatgpt = authorizeUrl({
+      provider: oauthProvider("openai"),
+      challenge: pkce.challenge,
+      state: "state",
+      nonce: "nonce",
+    });
+    assert.match(chatgpt, /redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback/);
+    assert.match(chatgpt, /api\.connectors\.read/);
+    const grok = authorizeUrl({
+      provider: oauthProvider("xai"),
+      challenge: pkce.challenge,
+      state: "state",
+      nonce: "nonce",
+    });
+    assert.match(grok, /127\.0\.0\.1%3A56121%2Fcallback/);
+    const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+    const body = Buffer.from(
+      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" } }),
+    ).toString("base64url");
+    const idToken = `${header}.${body}.sig`;
+    assert.equal(accountIdFromIdToken(idToken), "acct_1");
+    const saved = credentialDocument(
+      "openai",
+      { accessToken: "access", refreshToken: "refresh", idToken },
+      new Date("2026-10-13T00:00:00.000Z"),
+    ) as { auth_mode: string; tokens: { account_id: string } };
+    assert.equal(saved.auth_mode, "chatgpt");
+    assert.equal(saved.tokens.account_id, "acct_1");
+    assert.equal(credentialPath("anthropic", "/Users/ada"), "/Users/ada/.claude/.credentials.json");
+    assert.equal(
+      accessTokenFromCredential(
+        "anthropic",
+        JSON.stringify(credentialDocument("anthropic", { accessToken: "claude-token" })),
+      ),
+      "claude-token",
+    );
+    assert.equal(
+      accessTokenFromCredential("xai", JSON.stringify(credentialDocument("xai", { accessToken: "grok-token" }))),
+      "grok-token",
+    );
   });
 
   it("checks common locations when the preference is blank", () => {

@@ -37,11 +37,5 @@ export function upsertAddedAi(items: AddedAi[], next: AddedAi): AddedAi[] {
 
 export function signInFirstMessage(provider: ProviderId): string {
   const label = PROVIDER_LABEL[provider];
-  if (provider === "ollama") {
-    return "Add Ollama in Add AI before asking. That screen checks the ollama command and saves it.";
-  }
-  if (provider === "apple") {
-    return "Add Apple Intelligence in Add AI before asking. That screen saves the shortcut.";
-  }
-  return `${label} isn't signed in. Open Add AI, select ${label}, and finish sign-in. That screen keeps the credential.`;
+  return `${label} isn't signed in. Open Add AI, select ${label}, and finish the browser OAuth sign-in. That screen keeps the credential. Raycast settings cannot start the login.`;
 }

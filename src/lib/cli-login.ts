@@ -25,7 +25,7 @@ export function loginRequiredMessage(command: CliName): string {
   const args = loginArgs(command);
   const shown = args ? `\`${command} ${args.join(" ")}\`` : `\`${command}\``;
   const name = command === "claude" ? "Claude" : command === "codex" ? "ChatGPT" : "Grok";
-  return `${name} isn't signed in. Open Add AI, select ${name}, and finish sign-in. That screen runs ${shown} and keeps the credential.`;
+  return `${name} isn't signed in. Open Add AI, select ${name}, and finish the browser OAuth sign-in. That screen keeps the credential. The command is ${shown}.`;
 }
 
 export function loginUrls(text: string): string[] {

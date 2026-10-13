@@ -118,7 +118,7 @@
       "name": "add-ai",
       "title": "Add AI",
       "subtitle": "Choose a provider",
-      "description": "Pick Claude, ChatGPT, Grok, Ollama, or Apple Intelligence, sign in, and keep that credential.",
+      "description": "Open Claude, ChatGPT, or Grok OAuth in the browser and keep the credential. Raycast settings cannot start this login.",
       "mode": "view",
       "keywords": [
         "login",
@@ -209,7 +209,7 @@
     {
       "name": "claudeCliPath",
       "title": "Claude CLI Path",
-      "description": "Prefilled with the usual location. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, Homebrew and /usr/local/bin are checked too.",
+      "description": "Path to the claude command. Sign in from the Add AI command. This settings page cannot open OAuth. After Add AI stores the credential, Raycast can log that account out here.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/claude",
@@ -218,7 +218,7 @@
     {
       "name": "codexCliPath",
       "title": "Codex CLI Path",
-      "description": "Prefilled with the usual location of the Codex CLI. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, Homebrew and /usr/local/bin are checked too.",
+      "description": "Path to the Codex CLI. Sign in to ChatGPT from the Add AI command. This settings page cannot open OAuth. After Add AI stores the credential, Raycast can log that account out here.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/codex",
@@ -227,7 +227,7 @@
     {
       "name": "grokCliPath",
       "title": "Grok CLI Path",
-      "description": "Prefilled with the usual location. <your-user-name> is replaced with the Mac account name saved in Add AI. If that file is missing, ~/.grok/bin, Homebrew, and /usr/local/bin are checked too.",
+      "description": "Path to the grok command. Sign in from the Add AI command. This settings page cannot open OAuth. After Add AI stores the credential, Raycast can log that account out here.",
       "type": "textfield",
       "required": false,
       "default": "/Users/<your-user-name>/.local/bin/grok",

@@ -1,8 +1,11 @@
 import { Action, ActionPanel, Alert, confirmAlert, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
+import { homedir } from "os";
 import { useCallback, useEffect, useState } from "react";
 import { loadAddedAis, removeAddedAi } from "./lib/connections";
 import { type AddedAi } from "./lib/connection-json";
-import { PROVIDER_LABEL, PROVIDERS, type ProviderId } from "./lib/types";
+import { removeCredential } from "./lib/oauth-login";
+import { OAUTH_PROVIDERS, type OAuthProviderId } from "./lib/oauth-providers";
+import { oauthClient } from "./oauth-clients";
 import { ProviderLogin } from "./provider-login";
 
 export default function Command() {
@@ -26,15 +29,17 @@ export default function Command() {
     reload();
   }, [reload]);
 
-  async function remove(provider: ProviderId) {
+  async function remove(provider: OAuthProviderId, title: string) {
     const confirmed = await confirmAlert({
       title: "Remove Saved Sign-In",
-      message: `Remove the saved ${PROVIDER_LABEL[provider]} sign-in from Personal AI?`,
+      message: `Remove the saved ${title} OAuth credential from this Mac?`,
       primaryAction: { title: "Remove Sign-In", style: Alert.ActionStyle.Destructive },
     });
     if (!confirmed) return;
     try {
       await removeAddedAi(provider);
+      removeCredential(provider, homedir());
+      await oauthClient(provider).removeTokens();
       reload();
       await showToast({ style: Toast.Style.Success, title: "Saved Sign-In Removed" });
     } catch (caught) {
@@ -47,40 +52,36 @@ export default function Command() {
   }
 
   return (
-    <List isLoading={connections === undefined} searchBarPlaceholder="Search AI providers">
+    <List
+      isLoading={connections === undefined}
+      navigationTitle="Add AI"
+      searchBarPlaceholder="Choose Claude, ChatGPT, or Grok"
+    >
       {error ? (
         <List.EmptyView title="Couldn't Load Sign-Ins" description={error} />
       ) : connections === undefined ? null : (
-        PROVIDERS.map((provider) => {
+        OAUTH_PROVIDERS.map((provider) => {
           const added = connections?.find((item) => item.provider === provider.id);
           return (
             <List.Item
               key={provider.id}
               icon={added ? Icon.CheckCircle : Icon.Plus}
               title={provider.title}
-              subtitle={added ? `Signed in as ${added.accountName}` : "Not signed in"}
-              accessories={[{ text: added ? "Credential saved" : "Add" }]}
+              subtitle={added ? "OAuth credential saved" : "Not signed in"}
+              accessories={[{ text: added ? "Credential saved" : "OAuth" }]}
               actions={
                 <ActionPanel>
                   <Action
-                    title={added ? `Sign In to ${provider.title} Again` : `Add ${provider.title}`}
-                    icon={added ? Icon.ArrowClockwise : Icon.Plus}
-                    onAction={() =>
-                      push(
-                        <ProviderLogin
-                          provider={provider.id}
-                          initialAccountName={added?.accountName}
-                          onSaved={reload}
-                        />,
-                      )
-                    }
+                    title={added ? `Sign In to ${provider.title} Again` : `Sign In to ${provider.title}`}
+                    icon={Icon.Globe}
+                    onAction={() => push(<ProviderLogin provider={provider.id} onSaved={reload} />)}
                   />
                   {added ? (
                     <Action
                       title="Remove Saved Sign-In"
                       icon={Icon.Trash}
                       style={Action.Style.Destructive}
-                      onAction={() => void remove(provider.id)}
+                      onAction={() => void remove(provider.id, provider.title)}
                     />
                   ) : null}
                 </ActionPanel>

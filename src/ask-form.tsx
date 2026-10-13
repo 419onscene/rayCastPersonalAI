@@ -85,21 +85,28 @@ export function AskCommand(props: { provider?: ProviderId }) {
   }, []);
 
   useEffect(() => {
-    if (provider === "apple" || provider === "anthropic") {
+    const needsOAuth = provider === "anthropic" || provider === "openai" || provider === "xai";
+    if (!connectionsReady) {
+      if (needsOAuth || provider === "ollama") setListLoading(true);
+      return;
+    }
+    if (provider === "apple") {
       setModels([]);
+      setListError(undefined);
       setListLoading(false);
       setStatusMessage(undefined);
-      if (!connectionsReady) return;
-      setListError(added ? undefined : signInFirstMessage(provider));
       return;
     }
-    if (!connectionsReady) {
-      setListLoading(true);
-      return;
-    }
-    if (!added || !home) {
+    if (needsOAuth && !added) {
       setModels([]);
       setListError(signInFirstMessage(provider));
+      setListLoading(false);
+      setStatusMessage(undefined);
+      return;
+    }
+    if (provider === "anthropic") {
+      setModels([]);
+      setListError(undefined);
       setListLoading(false);
       setStatusMessage(undefined);
       return;
@@ -276,7 +283,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
     >
       <Form.Description
         title="How Asking Works"
-        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Sign in from Add AI first. Ask uses the credential saved there."
+        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Claude, ChatGPT, and Grok sign in from Add AI with browser OAuth. Ask uses the credential saved there."
       />
       <Form.TextArea id="prompt" title="Prompt" placeholder="What do you want to know?" autoFocus enableMarkdown />
       <Form.Dropdown id="templateId" title="Saved Prompt" defaultValue="none">
@@ -307,9 +314,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
           ))}
         </Form.Dropdown>
       )}
-      {listError && (provider === "anthropic" || provider === "apple") ? (
-        <Form.Description title="Sign-In" text={listError} />
-      ) : null}
+      {listError && provider === "anthropic" ? <Form.Description title="Sign-In" text={listError} /> : null}
       {provider === "apple" ? (
         <Form.Description title="Model" text={`Runs the “${appleShortcutName}” shortcut with the shortcuts command.`} />
       ) : provider === "anthropic" ? (
