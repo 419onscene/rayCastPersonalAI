@@ -1,7 +1,7 @@
 import { tmpdir } from "os";
 import { runAppleShortcut } from "./apple";
 import { commandEnv, resolveCliBinary } from "./binaries";
-import { ensureSignedIn, isAuthFailure, loginRequiredMessage, startCliLogin } from "./cli-login";
+import { ensureSignedIn, isAuthFailure, loginRequiredMessage } from "./cli-login";
 import { buildProviderCommand } from "./cli-command";
 import {
   createOllamaPlainParser,
@@ -110,7 +110,6 @@ export async function generateReply(
     if (handlers.signal.aborted) throw error;
     const detail = commandErrorText(error);
     if (isAuthFailure(detail)) {
-      startCliLogin(binary, command.command, input.home);
       throw new Error(loginRequiredMessage(command.command));
     }
     if (/enoent/i.test(detail)) {

@@ -25,18 +25,101 @@ export function loginRequiredMessage(command: CliName): string {
   const args = loginArgs(command);
   const shown = args ? `\`${command} ${args.join(" ")}\`` : `\`${command}\``;
   const name = command === "claude" ? "Claude" : command === "codex" ? "ChatGPT" : "Grok";
-  return `${name} isn't signed in yet. ${shown} should open a browser. Finish that sign-in, then ask again.`;
+  return `${name} isn't signed in. Open Add AI, select ${name}, and finish sign-in. That screen runs ${shown} and keeps the credential.`;
 }
 
-export function startCliLogin(binary: string, command: CliName, home?: string): void {
+export function loginUrls(text: string): string[] {
+  return [...new Set(text.match(/https?:\/\/[^\s<>"')]+/g) ?? [])];
+}
+
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+export function terminalLoginCommand(binary: string, command: CliName, home?: string): string | undefined {
   const args = loginArgs(command);
-  if (!args) return;
-  const child = spawn(binary, args, {
-    detached: true,
-    stdio: "ignore",
-    env: commandEnv(binary, undefined, home),
+  if (!args) return undefined;
+  const line = [binary, ...args].map(shellQuote).join(" ");
+  if (!home) return line;
+  return `export HOME=${shellQuote(home)}; ${line}`;
+}
+
+export function terminalLoginAppleScript(shellCommand: string): string {
+  const escaped = shellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  return `tell application "Terminal"\nactivate\ndo script "${escaped}"\nend tell`;
+}
+
+export function runCliLogin(input: {
+  binary: string;
+  command: CliName;
+  home?: string;
+  signal?: AbortSignal;
+  onOutput?: (chunk: string) => void;
+}): Promise<{ ok: true; output: string } | { ok: false; error: string }> {
+  const args = loginArgs(input.command);
+  if (!args) return Promise.resolve({ ok: false, error: "This provider has no CLI login." });
+  return new Promise((resolve) => {
+    const child = spawn(input.binary, args, {
+      env: commandEnv(input.binary, undefined, input.home),
+      stdio: ["pipe", "pipe", "pipe"],
+      signal: input.signal,
+    });
+    let output = "";
+    let settled = false;
+    const finish = (result: { ok: true; output: string } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const push = (chunk: string) => {
+      output += chunk;
+      input.onOutput?.(chunk);
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", push);
+    child.stderr.on("data", push);
+    child.stdin.on("error", () => undefined);
+    try {
+      child.stdin.write("\n");
+    } catch {
+      // The login process can exit before the newline is written.
+    }
+    child.on("error", (error) => {
+      if (input.signal?.aborted) finish({ ok: false, error: "Sign-in cancelled." });
+      else finish({ ok: false, error: error.message });
+    });
+    child.on("close", (code) => {
+      if (input.signal?.aborted) finish({ ok: false, error: "Sign-in cancelled." });
+      else if (code === 0) finish({ ok: true, output });
+      else finish({ ok: false, error: clipLogin(output) || `Login exited with code ${code ?? "unknown"}` });
+    });
   });
-  child.unref();
+}
+
+export async function credentialState(
+  binary: string,
+  command: CliName,
+  signal?: AbortSignal,
+  home?: string,
+): Promise<"yes" | "no" | "unknown"> {
+  const timeout = AbortSignal.timeout(15000);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  if (command === "grok") {
+    try {
+      await runCommand(binary, ["models"], { env: commandEnv(binary, undefined, home), signal: combined });
+      return "yes";
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (timeout.aborted) return "unknown";
+      const text = commandErrorText(error);
+      if (isAuthFailure(text) || /exited with code 1\b/.test(text)) return "no";
+      return "unknown";
+    }
+  }
+  const args = statusArgs(command);
+  if (!args) return "unknown";
+  return loginState(binary, args, signal, home);
 }
 
 export async function ensureSignedIn(
@@ -49,8 +132,12 @@ export async function ensureSignedIn(
   if (!args) return undefined;
   const state = await loginState(binary, args, signal, home);
   if (state !== "no") return undefined;
-  startCliLogin(binary, command, home);
   return loginRequiredMessage(command);
+}
+
+function clipLogin(value: string): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > 500 ? `${compact.slice(0, 500)}…` : compact;
 }
 
 async function loginState(

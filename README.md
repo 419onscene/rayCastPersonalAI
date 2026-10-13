@@ -46,12 +46,12 @@ Each command is declared separately so you can bind them independently:
 | Ask Apple Intelligence | Locked to your Shortcut. Calls `shortcuts`.                                                               |
 | Open in Claude         | Opens the Claude desktop app with the prompt filled in.                                                   |
 | Open in ChatGPT        | Opens the ChatGPT desktop app and pastes the prompt into a new chat.                                      |
-| Add AI                 | Saves this Mac's account name and starts sign-in for Claude, ChatGPT, and Grok.                           |
+| Add AI                 | A separate screen. Pick a provider, sign in, and keep that credential.                                    |
 | Manage Saved Prompts   | Create, edit, and delete templates.                                                                       |
 
 ## Local CLIs
 
-Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with the Mac account name saved in **Add AI**. Until that name is saved, the extension uses the account Raycast is running as. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
+Raycast does not inherit your shell PATH. Each CLI path preference is prefilled with the usual location. `<your-user-name>` is replaced with the Mac account name saved for that provider in **Add AI**. If that file is missing, the command checks the other usual locations. A path you type yourself, which is not one of those locations, has to exist. There is no API-key fallback.
 
 | Provider           | Binary      | What it runs                                                                                                 |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------ |
@@ -75,9 +75,11 @@ Search order after the prefilled path:
 
 If you replace a prefilled path with a different file and that file is missing, the command stops.
 
-Run **Add AI** and enter the short Mac account name (the folder name inside `/Users`). Save it, then use **Sign In to Claude**, **Sign In to ChatGPT**, or **Sign In to Grok**. Each action starts `claude auth login`, `codex login`, or `grok login`, which should open a browser. Finish that sign-in, then ask. The login is saved by the CLI. **Check Ollama** confirms the `ollama` command is installed. Local models need the Ollama app running. `ollama signin` is only for an Ollama account. Apple Intelligence needs the Shortcut from the section below.
+**Add AI** is its own screen. It lists Claude, ChatGPT, Grok, Ollama, and Apple Intelligence. Choose one, enter the short Mac account name (the folder name inside `/Users`), and sign in.
 
-Ask still checks the login. If it is missing, the same browser sign-in starts from the reply.
+Claude runs `claude auth login`. ChatGPT runs `codex login`. Grok runs `grok login`. The sign-in screen stays open until that command stores the credential. If the browser login needs a terminal, **Open Terminal to Sign In** runs the same command in Terminal and this screen waits until the credential is stored. Ollama saves the local `ollama` command. Apple Intelligence saves the Shortcut from preferences.
+
+Ask uses a provider only after that sign-in is saved. A missing login tells you to open Add AI and select that provider. The CLI keeps the credential for the Mac account. Personal AI remembers which providers are signed in.
 
 Claude Code has no command that lists the models for this login, so Ask Claude does not show a model menu. Leave Model blank and the run uses the model already selected in Claude Code. Type an id from Claude's `/model` command when you want a different one. ChatGPT, Grok, and Ollama still show only the models their list commands return.
 
@@ -100,7 +102,7 @@ Open **Raycast Settings → Extensions → Personal AI**.
 | Ollama CLI Path             | Prefilled as `/usr/local/bin/ollama`.                                                                                                                                                |
 | Shortcuts CLI Path          | Prefilled as `/usr/bin/shortcuts`.                                                                                                                                                   |
 
-There are no API-key preferences. **Add AI** opens the CLI's browser sign-in. Ask does the same when that login is missing.
+There are no API-key preferences. **Add AI** is where each provider's login is stored.
 
 ## Saved prompts
 

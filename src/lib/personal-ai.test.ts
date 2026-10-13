@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { accountHome, detectedAccountName } from "./account-name";
+import { parseAddedAis, serializeAddedAis, signInFirstMessage, upsertAddedAi } from "./connection-json";
 import { formatShortcutError } from "./apple";
 import { candidatePaths, expandCliPath, resolveCliBinary } from "./binaries";
 import { buildProviderCommand } from "./cli-command";
-import { isAuthFailure, loginArgs, loginRequiredMessage } from "./cli-login";
+import {
+  isAuthFailure,
+  loginArgs,
+  loginRequiredMessage,
+  loginUrls,
+  shellQuote,
+  terminalLoginAppleScript,
+  terminalLoginCommand,
+} from "./cli-login";
 import { createOllamaPlainParser, deltasFromClaudeLine, deltasFromCodexLine, deltasFromGrokLine } from "./cli-output";
 import { composePrompt } from "./compose-prompt";
 import { chatGptPasteScript, chatgptDesktopUrl, claudeDesktopUrl, CLAUDE_PROMPT_LIMIT } from "./desktop";
@@ -309,7 +318,28 @@ describe("binary resolution", () => {
     assert.deepEqual(loginArgs("grok"), ["login"]);
     assert.equal(isAuthFailure("Please sign in with codex login"), true);
     assert.match(loginRequiredMessage("claude"), /claude auth login/);
-    assert.match(loginRequiredMessage("claude"), /Finish that sign-in/);
+    assert.match(loginRequiredMessage("claude"), /Add AI/);
+    assert.match(loginRequiredMessage("claude"), /keeps the credential/);
+    assert.deepEqual(loginUrls("Open https://claude.ai/oauth/authorize?code=1 now"), [
+      "https://claude.ai/oauth/authorize?code=1",
+    ]);
+    const terminal = terminalLoginCommand("/Users/ada/.local/bin/claude", "claude", "/Users/ada");
+    assert.equal(
+      terminal,
+      `export HOME=${shellQuote("/Users/ada")}; ${shellQuote("/Users/ada/.local/bin/claude")} 'auth' 'login'`,
+    );
+    assert.match(terminalLoginAppleScript(terminal ?? ""), /tell application "Terminal"/);
+  });
+
+  it("remembers one saved sign-in per provider", () => {
+    const first = upsertAddedAi([], { provider: "anthropic", accountName: "ada", signedInAt: 1 });
+    const next = upsertAddedAi(first, { provider: "anthropic", accountName: "ada", signedInAt: 2 });
+    assert.equal(next.length, 1);
+    assert.equal(next[0]?.signedInAt, 2);
+    assert.deepEqual(parseAddedAis(serializeAddedAis(next)), next);
+    assert.deepEqual(parseAddedAis("{"), []);
+    assert.match(signInFirstMessage("openai"), /select ChatGPT/);
+    assert.match(signInFirstMessage("openai"), /keeps the credential/);
   });
 
   it("checks common locations when the preference is blank", () => {

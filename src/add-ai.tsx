@@ -1,171 +1,94 @@
-import { Action, ActionPanel, Form, Icon, openExtensionPreferences, showToast, Toast } from "@raycast/api";
-import { homedir } from "os";
-import { useEffect, useState } from "react";
-import { accountHome, detectedAccountName } from "./lib/account-name";
-import { loadAccountName, saveAccountName } from "./lib/account-store";
-import { resolveCliBinary } from "./lib/binaries";
-import { loginArgs, startCliLogin } from "./lib/cli-login";
-import { readPreferences } from "./lib/preferences";
-import { type CliName } from "./lib/types";
-
-const SIGN_IN: { command: "claude" | "codex" | "grok"; title: string; label: string }[] = [
-  { command: "claude", title: "Sign In to Claude", label: "Claude" },
-  { command: "codex", title: "Sign In to ChatGPT", label: "ChatGPT" },
-  { command: "grok", title: "Sign In to Grok", label: "Grok" },
-];
+import { Action, ActionPanel, Alert, confirmAlert, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
+import { useCallback, useEffect, useState } from "react";
+import { loadAddedAis, removeAddedAi } from "./lib/connections";
+import { type AddedAi } from "./lib/connection-json";
+import { PROVIDER_LABEL, PROVIDERS, type ProviderId } from "./lib/types";
+import { ProviderLogin } from "./provider-login";
 
 export default function Command() {
-  const preferences = readPreferences();
-  const [accountName, setAccountName] = useState("");
-  const [ready, setReady] = useState(false);
+  const [connections, setConnections] = useState<AddedAi[] | undefined>(undefined);
+  const [error, setError] = useState<string>();
+  const { push } = useNavigation();
 
-  useEffect(() => {
-    let cancelled = false;
-    loadAccountName()
-      .then((saved) => {
-        if (cancelled) return;
-        setAccountName(saved.trim() || detectedAccountName(homedir()));
+  const reload = useCallback(() => {
+    loadAddedAis()
+      .then((loaded) => {
+        setConnections(loaded);
+        setError(undefined);
       })
-      .catch(() => {
-        if (!cancelled) setAccountName(detectedAccountName(homedir()));
-      })
-      .finally(() => {
-        if (!cancelled) setReady(true);
+      .catch((caught: unknown) => {
+        setConnections([]);
+        setError(caught instanceof Error ? caught.message : "Couldn't load saved sign-ins.");
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const home = accountHome(accountName);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
-  async function persistName(): Promise<string | undefined> {
-    if (!home) {
+  async function remove(provider: ProviderId) {
+    const confirmed = await confirmAlert({
+      title: "Remove Saved Sign-In",
+      message: `Remove the saved ${PROVIDER_LABEL[provider]} sign-in from Personal AI?`,
+      primaryAction: { title: "Remove Sign-In", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+    try {
+      await removeAddedAi(provider);
+      reload();
+      await showToast({ style: Toast.Style.Success, title: "Saved Sign-In Removed" });
+    } catch (caught) {
       await showToast({
         style: Toast.Style.Failure,
-        title: "Account Name Needed",
-        message: "Enter the short name of this Mac account, the same name that appears in /Users.",
+        title: "Couldn't Remove Sign-In",
+        message: caught instanceof Error ? caught.message : "Local storage rejected the delete.",
       });
-      return undefined;
     }
-    await saveAccountName(accountName);
-    return home;
-  }
-
-  async function handleSave() {
-    const savedHome = await persistName();
-    if (!savedHome) return;
-    await showToast({
-      style: Toast.Style.Success,
-      title: "Account Name Saved",
-      message: `CLI paths will use ${savedHome}.`,
-    });
-  }
-
-  async function signIn(command: "claude" | "codex" | "grok", label: string) {
-    const savedHome = await persistName();
-    if (!savedHome) return;
-    const preferencePath = pathFor(command);
-    const resolved = resolveCliBinary({ command, preferencePath, home: savedHome });
-    if ("error" in resolved) {
-      await showToast({ style: Toast.Style.Failure, title: `${label} CLI Missing`, message: resolved.error });
-      return;
-    }
-    startCliLogin(resolved.path, command, savedHome);
-    const args = loginArgs(command)?.join(" ") ?? "login";
-    await showToast({
-      style: Toast.Style.Success,
-      title: `${label} Sign-In Started`,
-      message: `Finish ${command} ${args} in the browser, then ask again.`,
-    });
-  }
-
-  async function checkOllama() {
-    const savedHome = await persistName();
-    if (!savedHome) return;
-    const resolved = resolveCliBinary({
-      command: "ollama",
-      preferencePath: preferences.ollamaCliPath,
-      home: savedHome,
-    });
-    if ("error" in resolved) {
-      await showToast({ style: Toast.Style.Failure, title: "Ollama CLI Missing", message: resolved.error });
-      return;
-    }
-    await showToast({
-      style: Toast.Style.Success,
-      title: "Ollama Is Installed",
-      message: `${resolved.path} is ready. Keep the Ollama app running for local models.`,
-    });
-  }
-
-  function pathFor(command: CliName): string {
-    if (command === "claude") return preferences.claudeCliPath;
-    if (command === "codex") return preferences.codexCliPath;
-    if (command === "grok") return preferences.grokCliPath;
-    if (command === "ollama") return preferences.ollamaCliPath;
-    return preferences.shortcutsCliPath;
   }
 
   return (
-    <Form
-      isLoading={!ready}
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm title="Save Account Name" icon={Icon.Person} onSubmit={handleSave} />
-          {SIGN_IN.map((item) => (
-            <Action
-              key={item.command}
-              title={item.title}
-              icon={Icon.Globe}
-              onAction={() => void signIn(item.command, item.label)}
+    <List isLoading={connections === undefined} searchBarPlaceholder="Search AI providers">
+      {error ? (
+        <List.EmptyView title="Couldn't Load Sign-Ins" description={error} />
+      ) : connections === undefined ? null : (
+        PROVIDERS.map((provider) => {
+          const added = connections?.find((item) => item.provider === provider.id);
+          return (
+            <List.Item
+              key={provider.id}
+              icon={added ? Icon.CheckCircle : Icon.Plus}
+              title={provider.title}
+              subtitle={added ? `Signed in as ${added.accountName}` : "Not signed in"}
+              accessories={[{ text: added ? "Credential saved" : "Add" }]}
+              actions={
+                <ActionPanel>
+                  <Action
+                    title={added ? `Sign In to ${provider.title} Again` : `Add ${provider.title}`}
+                    icon={added ? Icon.ArrowClockwise : Icon.Plus}
+                    onAction={() =>
+                      push(
+                        <ProviderLogin
+                          provider={provider.id}
+                          initialAccountName={added?.accountName}
+                          onSaved={reload}
+                        />,
+                      )
+                    }
+                  />
+                  {added ? (
+                    <Action
+                      title="Remove Saved Sign-In"
+                      icon={Icon.Trash}
+                      style={Action.Style.Destructive}
+                      onAction={() => void remove(provider.id)}
+                    />
+                  ) : null}
+                </ActionPanel>
+              }
             />
-          ))}
-          <Action title="Check Ollama" icon={Icon.CheckCircle} onAction={() => void checkOllama()} />
-          <Action
-            title="Open Extension Preferences"
-            icon={Icon.Gear}
-            onAction={() => void openExtensionPreferences()}
-          />
-        </ActionPanel>
-      }
-    >
-      <Form.Description
-        title="Add AI"
-        text="Enter this Mac's account name, then sign in to each CLI. Claude, ChatGPT, and Grok open a browser. The login stays in that CLI. Ollama is local. Apple Intelligence uses the shortcut in preferences."
-      />
-      <Form.TextField
-        id="accountName"
-        title="Mac Account Name"
-        placeholder="the short name in /Users"
-        value={accountName}
-        info="This replaces <your-user-name> in the CLI path preferences. Ask uses the saved name when it looks up claude, codex, grok, and ollama."
-        onChange={setAccountName}
-      />
-      <Form.Description
-        title="Home"
-        text={home ? home : "Enter a Mac account name such as the folder name inside /Users."}
-      />
-      {SIGN_IN.map((item) => (
-        <Form.Description
-          key={item.command}
-          title={item.label}
-          text={statusLine(item.command, pathFor(item.command), home)}
-        />
-      ))}
-      <Form.Description title="Ollama" text={statusLine("ollama", preferences.ollamaCliPath, home)} />
-      <Form.Description
-        title="Apple Intelligence"
-        text={`Uses the “${preferences.appleShortcutName}” shortcut through the shortcuts command. Change the shortcut name in extension preferences. There is no separate sign-in.`}
-      />
-    </Form>
+          );
+        })
+      )}
+    </List>
   );
-}
-
-function statusLine(command: CliName, preferencePath: string, home: string | undefined): string {
-  if (!home) return "Save a Mac account name to look up this CLI.";
-  const resolved = resolveCliBinary({ command, preferencePath, home });
-  if ("error" in resolved) return "The command was not found in the usual locations. Install it, then try again.";
-  if (command === "ollama") return `Found at ${resolved.path}. Local models need the Ollama app running.`;
-  return `Found at ${resolved.path}. Sign in to open the browser login.`;
 }

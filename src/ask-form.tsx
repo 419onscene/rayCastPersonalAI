@@ -10,8 +10,10 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { Answer } from "./answer";
-import { savedAccountHome } from "./lib/account-store";
+import { accountHome } from "./lib/account-name";
 import { resolveCliBinary } from "./lib/binaries";
+import { signInFirstMessage, type AddedAi } from "./lib/connection-json";
+import { loadAddedAis } from "./lib/connections";
 import { composePrompt } from "./lib/compose-prompt";
 import { listAccountModels, selectAccountModel, type AccountModel } from "./lib/models";
 import { readOllamaThinking, type OllamaThinking } from "./lib/ollama";
@@ -46,21 +48,20 @@ export function AskCommand(props: { provider?: ProviderId }) {
   const [ollamaThinking, setOllamaThinking] = useState<OllamaThinking>();
   const [thinkingLoading, setThinkingLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>();
-  const [home, setHome] = useState<string | undefined>();
-  const [homeReady, setHomeReady] = useState(false);
+  const [connections, setConnections] = useState<AddedAi[] | undefined>();
   const { push } = useNavigation();
+  const added = connections?.find((item) => item.provider === provider);
+  const home = added ? accountHome(added.accountName) : undefined;
+  const connectionsReady = connections !== undefined;
 
   useEffect(() => {
     let cancelled = false;
-    savedAccountHome()
-      .then((value) => {
-        if (!cancelled) setHome(value);
+    loadAddedAis()
+      .then((loaded) => {
+        if (!cancelled) setConnections(loaded);
       })
       .catch(() => {
-        if (!cancelled) setHome(undefined);
-      })
-      .finally(() => {
-        if (!cancelled) setHomeReady(true);
+        if (!cancelled) setConnections([]);
       });
     return () => {
       cancelled = true;
@@ -86,13 +87,21 @@ export function AskCommand(props: { provider?: ProviderId }) {
   useEffect(() => {
     if (provider === "apple" || provider === "anthropic") {
       setModels([]);
-      setListError(undefined);
       setListLoading(false);
       setStatusMessage(undefined);
+      if (!connectionsReady) return;
+      setListError(added ? undefined : signInFirstMessage(provider));
       return;
     }
-    if (!homeReady) {
+    if (!connectionsReady) {
       setListLoading(true);
+      return;
+    }
+    if (!added || !home) {
+      setModels([]);
+      setListError(signInFirstMessage(provider));
+      setListLoading(false);
+      setStatusMessage(undefined);
       return;
     }
     const controller = new AbortController();
@@ -129,7 +138,18 @@ export function AskCommand(props: { provider?: ProviderId }) {
         if (!controller.signal.aborted) setListLoading(false);
       });
     return () => controller.abort();
-  }, [provider, defaultModel, ollamaHost, claudeCliPath, codexCliPath, grokCliPath, ollamaCliPath, home, homeReady]);
+  }, [
+    provider,
+    defaultModel,
+    ollamaHost,
+    claudeCliPath,
+    codexCliPath,
+    grokCliPath,
+    ollamaCliPath,
+    home,
+    connectionsReady,
+    added,
+  ]);
 
   useEffect(() => {
     if (provider !== "ollama" || !model) {
@@ -198,7 +218,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
       });
       return;
     }
-    if (!homeReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
+    if (!connectionsReady || listLoading || (provider === "ollama" && thinkingLoading && !listError)) {
       await showToast({
         style: Toast.Style.Animated,
         title: "Still Checking Models",
@@ -256,7 +276,7 @@ export function AskCommand(props: { provider?: ProviderId }) {
     >
       <Form.Description
         title="How Asking Works"
-        text="Pick a saved prompt to start from it. Anything you type here is added after that template. The reply comes from the local CLI you already signed in to."
+        text="Pick a saved prompt to start from it. Anything you type here is added after that template. Sign in from Add AI first. Ask uses the credential saved there."
       />
       <Form.TextArea id="prompt" title="Prompt" placeholder="What do you want to know?" autoFocus enableMarkdown />
       <Form.Dropdown id="templateId" title="Saved Prompt" defaultValue="none">
@@ -287,6 +307,9 @@ export function AskCommand(props: { provider?: ProviderId }) {
           ))}
         </Form.Dropdown>
       )}
+      {listError && (provider === "anthropic" || provider === "apple") ? (
+        <Form.Description title="Sign-In" text={listError} />
+      ) : null}
       {provider === "apple" ? (
         <Form.Description title="Model" text={`Runs the “${appleShortcutName}” shortcut with the shortcuts command.`} />
       ) : provider === "anthropic" ? (

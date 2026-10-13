@@ -1,5 +1,5 @@
 import { commandEnv, resolveCliBinary } from "./binaries";
-import { ensureSignedIn, isAuthFailure, loginRequiredMessage, startCliLogin } from "./cli-login";
+import { ensureSignedIn, isAuthFailure, loginRequiredMessage } from "./cli-login";
 import { ollamaEnv, parseOllamaList } from "./ollama";
 import { commandErrorText, runCommand } from "./process";
 import { type CliName, type ProviderId } from "./types";
@@ -82,7 +82,6 @@ export async function listAccountModels(input: {
     if (input.signal?.aborted) throw error;
     const detail = commandErrorText(error);
     if (isAuthFailure(detail)) {
-      startCliLogin(resolved.path, invocation.command, input.home);
       return { models: [], error: loginRequiredMessage(invocation.command) };
     }
     const command = `${invocation.command} ${invocation.args.join(" ")}`;

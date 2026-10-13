@@ -117,8 +117,8 @@
     {
       "name": "add-ai",
       "title": "Add AI",
-      "subtitle": "Account and sign-in",
-      "description": "Enter this Mac's account name and sign in to Claude, ChatGPT, and Grok. Check that Ollama is installed.",
+      "subtitle": "Choose a provider",
+      "description": "Pick Claude, ChatGPT, Grok, Ollama, or Apple Intelligence, sign in, and keep that credential.",
       "mode": "view",
       "keywords": [
         "login",
